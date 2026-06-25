@@ -18,7 +18,10 @@ CREATE TABLE items (
     tags TEXT[],
     status TEXT DEFAULT 'fresh' CHECK (status IN ('fresh', 'surfaced', 'acted_on', 'archived')),
     created_at TIMESTAMPTZ DEFAULT now(),
-    processed_at TIMESTAMPTZ
+    processed_at TIMESTAMPTZ,
+    image_path TEXT,
+    interest INTEGER DEFAULT 2,
+    goal_alignment INTEGER DEFAULT 1
 );
 
 -- 3. Seed default categories
