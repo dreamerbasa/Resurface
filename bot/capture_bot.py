@@ -16,6 +16,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = process_message(update.message.text, content_type="text")
+        if result.get("status") == "needs_screenshot":
+            await update.message.reply_text(result["message"])
+            return
         tags = ", ".join(result["tags"])
         await update.message.reply_text(
             f"Saved under {result['category_name']}: {result['title']}\n\nTags: {tags}"

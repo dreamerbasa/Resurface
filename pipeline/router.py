@@ -1,15 +1,27 @@
 from datetime import datetime
 
 from pipeline.extractors import text
+from pipeline.extractors import url as url_extractor
 from pipeline.classifier import classify
 from db.queries import insert_item
+
+_URL_PATTERN = __import__("re").compile(r"https?://[^\s<>\"']+")
 
 
 def process_message(raw_content: str, content_type: str = "text") -> dict:
     if content_type == "text":
-        extracted_data = text.extract(raw_content)
+        if _URL_PATTERN.search(raw_content):
+            extracted_data = url_extractor.extract(raw_content)
+        else:
+            extracted_data = text.extract(raw_content)
     else:
         raise ValueError(f"Unsupported content type: {content_type}")
+
+    if extracted_data.get("needs_screenshot"):
+        return {
+            "status": "needs_screenshot",
+            "message": "Instagram links don't give me much to work with. Send a screenshot of the post instead — I'll read it much better!",
+        }
 
     classification = classify(extracted_data["extracted_text"])
 

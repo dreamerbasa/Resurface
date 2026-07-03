@@ -4,3 +4,6 @@ anthropic
 python-dotenv
 google-genai
 openai
+trafilatura
+requests
+youtube-transcript-api
