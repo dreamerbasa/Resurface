@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -27,9 +30,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Something went wrong: {e}")
 
 
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        voice = update.message.voice
+        file = await context.bot.get_file(voice.file_id)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".ogg")
+        tmp.close()
+        await file.download_to_drive(tmp.name)
+
+        result = process_message(
+            raw_content="",
+            content_type="voice",
+            file_path=tmp.name,
+        )
+        tags = ", ".join(result["tags"])
+        await update.message.reply_text(
+            f"Saved under {result['category_name']}: {result['title']}\n\nTags: {tags}"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Something went wrong: {e}")
+
+
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     print("Bot is running...")
     app.run_polling()

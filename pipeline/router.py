@@ -2,18 +2,21 @@ from datetime import datetime
 
 from pipeline.extractors import text
 from pipeline.extractors import url as url_extractor
+from pipeline.extractors import whisper
 from pipeline.classifier import classify
 from db.queries import insert_item
 
 _URL_PATTERN = __import__("re").compile(r"https?://[^\s<>\"']+")
 
 
-def process_message(raw_content: str, content_type: str = "text") -> dict:
+def process_message(raw_content: str, content_type: str = "text", file_path: str = None) -> dict:
     if content_type == "text":
         if _URL_PATTERN.search(raw_content):
             extracted_data = url_extractor.extract(raw_content)
         else:
             extracted_data = text.extract(raw_content)
+    elif content_type == "voice":
+        extracted_data = whisper.extract(file_path, raw_content)
     else:
         raise ValueError(f"Unsupported content type: {content_type}")
 
