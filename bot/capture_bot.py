@@ -4,9 +4,13 @@ import tempfile
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-from config import TELEGRAM_BOT_TOKEN
+from config import TELEGRAM_BOT_TOKEN, AUTHORIZED_USER_IDS
 from pipeline.router import process_message
 from db.queries import update_item_rating, get_item
+
+
+def _is_authorized(update: Update) -> bool:
+    return update.effective_user.id in AUTHORIZED_USER_IDS
 
 _INTEREST_EMOJI = {3: "🔥", 2: "👍", 1: "🤷"}
 _GOAL_EMOJI = {3: "🎯", 2: "↔️", 1: "❌"}
@@ -64,6 +68,9 @@ async def _send_save_response(message, result):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
     await update.message.reply_text(
         "Hey! I'm your Resurface bot. Send me anything — "
         "ideas, links, screenshots, voice notes — and I'll "
@@ -72,6 +79,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
     try:
         result = process_message(update.message.text, content_type="text")
         if isinstance(result, dict) and result.get("status") == "needs_screenshot":
@@ -83,6 +93,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
     try:
         voice = update.message.voice
         file = await context.bot.get_file(voice.file_id)
@@ -101,6 +114,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
     try:
         photo = update.message.photo[-1]
         file = await context.bot.get_file(photo.file_id)
@@ -120,6 +136,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
     query = update.callback_query
     await query.answer()
 
