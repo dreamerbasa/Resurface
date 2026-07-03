@@ -78,6 +78,9 @@ def extract(image_file_path: str, raw_content: str = "") -> dict:
         if os.path.exists(image_file_path):
             os.remove(image_file_path)
 
+    if raw_content and raw_content != "screenshot":
+        extracted_text = f"User note: {raw_content}\n\n{extracted_text}"
+
     return {
         "content_type": "image",
         "raw_content": raw_content or "screenshot",

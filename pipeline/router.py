@@ -10,23 +10,11 @@ from db.queries import insert_item
 _URL_PATTERN = __import__("re").compile(r"https?://[^\s<>\"']+")
 
 
-def process_message(raw_content: str, content_type: str = "text", file_path: str = None) -> dict:
-    if content_type == "text":
-        if _URL_PATTERN.search(raw_content):
-            extracted_data = url_extractor.extract(raw_content)
-        else:
-            extracted_data = text.extract(raw_content)
-    elif content_type == "voice":
-        extracted_data = whisper.extract(file_path, raw_content)
-    elif content_type == "image":
-        extracted_data = vision.extract(file_path, raw_content)
-    else:
-        raise ValueError(f"Unsupported content type: {content_type}")
-
+def _process_single(extracted_data: dict) -> dict:
     if extracted_data.get("needs_screenshot"):
         return {
             "status": "needs_screenshot",
-            "message": "Instagram links don't give me much to work with. Send a screenshot of the post instead — I'll read it much better!",
+            "message": "This link doesn't give me much to work with. Send a screenshot of the post instead — I'll read it much better!",
         }
 
     classification = classify(extracted_data["extracted_text"])
@@ -43,11 +31,43 @@ def process_message(raw_content: str, content_type: str = "text", file_path: str
         "processed_at": datetime.utcnow().isoformat(),
     }
 
-    insert_item(item)
+    inserted = insert_item(item)
 
     return {
+        "item_id": inserted["id"],
         "category_name": classification["category_name"],
         "title": classification["title"],
         "summary": classification["summary"],
         "tags": classification["tags"],
     }
+
+
+def process_message(raw_content: str, content_type: str = "text", file_path: str = None):
+    if content_type == "text":
+        urls = url_extractor.find_urls(raw_content)
+
+        if len(urls) > 1:
+            remaining = raw_content
+            for u in urls:
+                remaining = remaining.replace(u, "")
+            user_note = remaining.strip() or None
+
+            results = []
+            for u in urls:
+                extracted_data = url_extractor.extract_single(u, user_note)
+                results.append(_process_single(extracted_data))
+            return results
+
+        if len(urls) == 1:
+            extracted_data = url_extractor.extract(raw_content)
+        else:
+            extracted_data = text.extract(raw_content)
+
+    elif content_type == "voice":
+        extracted_data = whisper.extract(file_path, raw_content)
+    elif content_type == "image":
+        extracted_data = vision.extract(file_path, raw_content)
+    else:
+        raise ValueError(f"Unsupported content type: {content_type}")
+
+    return _process_single(extracted_data)

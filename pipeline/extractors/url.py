@@ -108,6 +108,55 @@ def _extract_web(url: str) -> str:
         return f"Could not extract content. Original URL: {url}"
 
 
+def find_urls(raw_content: str) -> list:
+    return _URL_PATTERN.findall(raw_content)
+
+
+def extract_single(url: str, user_note: str = None) -> dict:
+    source_platform = _detect_platform(url)
+
+    if source_platform == "instagram":
+        return {
+            "content_type": "url",
+            "raw_content": url,
+            "extracted_text": None,
+            "source_platform": "instagram",
+            "url": url,
+            "user_note": user_note,
+            "needs_screenshot": True,
+        }
+
+    if source_platform == "medium":
+        extracted_text = _extract_medium(url)
+        if not extracted_text:
+            return {
+                "content_type": "url",
+                "raw_content": url,
+                "extracted_text": None,
+                "source_platform": "medium",
+                "url": url,
+                "user_note": user_note,
+                "needs_screenshot": True,
+            }
+
+    if source_platform == "youtube":
+        extracted_text = _extract_youtube(url)
+    elif source_platform != "medium":
+        extracted_text = _extract_web(url)
+
+    if user_note and extracted_text:
+        extracted_text = f"User note: {user_note}\n\n{extracted_text}"
+
+    return {
+        "content_type": "url",
+        "raw_content": url,
+        "extracted_text": extracted_text,
+        "source_platform": source_platform,
+        "url": url,
+        "user_note": user_note,
+    }
+
+
 def extract(raw_content: str) -> dict:
     match = _URL_PATTERN.search(raw_content)
     if not match:
