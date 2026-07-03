@@ -51,9 +51,32 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Something went wrong: {e}")
 
 
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        photo = update.message.photo[-1]
+        file = await context.bot.get_file(photo.file_id)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        tmp.close()
+        await file.download_to_drive(tmp.name)
+
+        caption = update.message.caption or ""
+        result = process_message(
+            raw_content=caption,
+            content_type="image",
+            file_path=tmp.name,
+        )
+        tags = ", ".join(result["tags"])
+        await update.message.reply_text(
+            f"Saved under {result['category_name']}: {result['title']}\n\nTags: {tags}"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Something went wrong: {e}")
+
+
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     print("Bot is running...")

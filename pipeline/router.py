@@ -3,6 +3,7 @@ from datetime import datetime
 from pipeline.extractors import text
 from pipeline.extractors import url as url_extractor
 from pipeline.extractors import whisper
+from pipeline.extractors import vision
 from pipeline.classifier import classify
 from db.queries import insert_item
 
@@ -17,6 +18,8 @@ def process_message(raw_content: str, content_type: str = "text", file_path: str
             extracted_data = text.extract(raw_content)
     elif content_type == "voice":
         extracted_data = whisper.extract(file_path, raw_content)
+    elif content_type == "image":
+        extracted_data = vision.extract(file_path, raw_content)
     else:
         raise ValueError(f"Unsupported content type: {content_type}")
 
