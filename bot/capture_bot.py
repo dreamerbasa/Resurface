@@ -78,6 +78,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def mychatid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Your chat ID: {update.effective_chat.id}")
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         await update.message.reply_text("Sorry, this is a private bot.")
@@ -185,6 +189,7 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("mychatid", mychatid))
     app.add_handler(CallbackQueryHandler(handle_rating))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
