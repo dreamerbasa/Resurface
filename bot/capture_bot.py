@@ -102,16 +102,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_user_active(update.effective_user.id, True)
         await update.message.reply_text(
             "Welcome back to Dropzone! \U0001f4e6 Nudges resumed.\n\n"
-            "*Commands:*\n"
+            "<b>Commands:</b>\n"
             "/review — see your pending items\n"
             "/categories — view your categories\n"
-            "/search \\[keyword\\] — find saved items\n"
+            "/search [keyword] — find saved items\n"
             "/stats — your numbers\n"
             "/nudgetime HH:MM — set morning nudge time (on the hour or half hour)\n"
             "/remindertime HH:MM — set nightly reminder time (on the hour or half hour)\n"
             "/stop — pause all nudges\n"
             "/start — resume nudges",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     else:
         await update.message.reply_text(
@@ -119,7 +119,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Your second brain. Dump everything, forget nothing.\n\n"
             "Send me anything — screenshots, links, voice notes, ideas — "
             "and I'll organize it, remember it, and remind you when it matters.\n\n"
-            "*What I can handle:*\n"
+            "<b>What I can handle:</b>\n"
             "\U0001f4f8 Screenshots — I read the text, ignore the clutter\n"
             "\U0001f517 Links — articles, YouTube, Substack\n"
             "\U0001f3a4 Voice notes — transcribed and categorized\n"
@@ -127,17 +127,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "After each save, I'll ask you to rate:\n"
             "→ How interested are you?\n"
             "→ Does it align with your goals?\n\n"
-            "*Commands:*\n"
+            "<b>Commands:</b>\n"
             "/review — see your pending items\n"
             "/categories — view your categories\n"
-            "/search \\[keyword\\] — find saved items\n"
+            "/search [keyword] — find saved items\n"
             "/stats — your numbers\n"
             "/nudgetime HH:MM — set morning nudge time (on the hour or half hour)\n"
             "/remindertime HH:MM — set nightly reminder time (on the hour or half hour)\n"
             "/stop — pause all nudges\n"
             "/start — resume nudges\n\n"
             "Just start sharing. I'll handle the rest.",
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
 
 
@@ -337,10 +337,10 @@ async def _render_nudge_list(query, context: ContextTypes.DEFAULT_TYPE, chat_id:
         except Exception:
             pass
         await context.bot.send_message(
-            chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown"
+            chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML"
         )
     else:
-        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="HTML")
 
 
 async def handle_nudge_list_tap(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -372,17 +372,17 @@ async def handle_nudge_list_tap(update: Update, context: ContextTypes.DEFAULT_TY
                 photo=io.BytesIO(image_bytes),
                 caption=text,
                 reply_markup=keyboard,
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"{text}\n\n_Original screenshot no longer available._",
+                text=f"{text}\n\n<i>Original screenshot no longer available.</i>",
                 reply_markup=keyboard,
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
     else:
-        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="Markdown")
+        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="HTML")
 
 
 async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE):

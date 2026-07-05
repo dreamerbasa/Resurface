@@ -15,6 +15,12 @@ _ACTED_MARKER = {
 }
 
 
+def escape_html(text) -> str:
+    if text is None:
+        return ""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _current_window_minutes() -> tuple[int, int]:
     now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     total_minutes = now_ist.hour * 60 + now_ist.minute
@@ -25,11 +31,13 @@ def _current_window_minutes() -> tuple[int, int]:
 
 def _list_line(number: int, item: dict) -> str:
     has_url = bool(item.get("url"))
-    title = f"[{item['title']}]({item['url']})" if has_url else item["title"]
+    title = escape_html(item["title"])
+    title_display = f"<a href='{escape_html(item['url'])}'>{title}</a>" if has_url else title
     arrow = " ↗" if has_url else ""
+    category = escape_html(item["category_name"])
     return (
-        f"{number}. {item['emoji']} {title}{arrow}\n"
-        f"   {item['category_name']} · {item['age_days']:.0f}d ago"
+        f"{number}. {item['emoji']} {title_display}{arrow}\n"
+        f"   {category} · {item['age_days']:.0f}d ago"
     )
 
 
@@ -48,7 +56,7 @@ def build_list_view(session: dict) -> tuple[str, InlineKeyboardMarkup | None]:
         item = items[item_id]
         if item_id in acted:
             marker, word = _ACTED_MARKER.get(acted[item_id], ("✅", "done"))
-            lines.append(f"{idx}. {marker} {item['title']} — {word}")
+            lines.append(f"{idx}. {marker} {escape_html(item['title'])} — {word}")
         else:
             lines.append(_list_line(idx, item))
             number_buttons.append(
@@ -61,21 +69,22 @@ def build_list_view(session: dict) -> tuple[str, InlineKeyboardMarkup | None]:
 
 
 def _detail_body(item: dict) -> str:
+    title = escape_html(item["title"])
     content_type = item.get("content_type")
     if content_type == "url":
-        header_line = f"{item['emoji']} [{item['title']}]({item['url']})"
-        content = item.get("summary") or ""
+        header_line = f"{item['emoji']} <a href='{escape_html(item['url'])}'>{title}</a>"
+        content = escape_html(item.get("summary") or "")
     elif content_type == "voice":
-        header_line = f"{item['emoji']} {item['title']}"
-        content = f"🎤 Transcription:\n{item.get('extracted_text') or ''}"
+        header_line = f"{item['emoji']} {title}"
+        content = f"🎤 Transcription:\n{escape_html(item.get('extracted_text') or '')}"
     elif content_type == "image":
-        header_line = f"{item['emoji']} {item['title']}"
-        content = (item.get("extracted_text") or "")[:500]
+        header_line = f"{item['emoji']} {title}"
+        content = escape_html((item.get("extracted_text") or "")[:500])
     else:
-        header_line = f"{item['emoji']} {item['title']}"
-        content = item.get("raw_content") or ""
+        header_line = f"{item['emoji']} {title}"
+        content = escape_html(item.get("raw_content") or "")
 
-    meta_line = f"{item['category_name']} · {item['age_days']:.0f}d ago"
+    meta_line = f"{escape_html(item['category_name'])} · {item['age_days']:.0f}d ago"
     return f"{header_line}\n{meta_line}\n\n{content}"
 
 
@@ -154,7 +163,7 @@ async def send_daily_nudge(context):
             text, keyboard = build_list_view(get_session(chat_id))
 
             await context.bot.send_message(
-                chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown"
+                chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML"
             )
 
             for item in items:
