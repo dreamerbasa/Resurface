@@ -6,13 +6,12 @@ from db.queries import get_active_users, update_after_surface
 from intelligence.scoring import get_daily_items
 
 
-def _current_ist_time() -> str:
+def _current_window_minutes() -> tuple[int, int]:
     now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
-    m = now_ist.minute
-    rounded_minute = 0 if m < 15 else 30 if m < 45 else 0
-    if m >= 45:
-        now_ist = now_ist.replace(hour=now_ist.hour + 1)
-    return f"{now_ist.hour:02d}:{rounded_minute:02d}"
+    total_minutes = now_ist.hour * 60 + now_ist.minute
+    window_start_minutes = (total_minutes // 30) * 30
+    window_end_minutes = window_start_minutes + 29
+    return window_start_minutes, window_end_minutes
 
 
 def _build_keyboard(item: dict) -> InlineKeyboardMarkup:
@@ -48,7 +47,9 @@ def _format_item_text(item: dict) -> str:
 async def send_daily_nudge(context):
     print(f"Nudge check running at {datetime.utcnow()} UTC")
 
-    current_window = _current_ist_time()
+    window_start_minutes, window_end_minutes = _current_window_minutes()
+    window_start_h, window_start_m = divmod(window_start_minutes, 60)
+    window_end_h, window_end_m = divmod(window_end_minutes, 60)
     users = get_active_users()
     print(f"Active users found: {len(users)}")
 
@@ -56,10 +57,13 @@ async def send_daily_nudge(context):
 
     for user in users:
         user_nudge = user.get("nudge_time", "08:30")
-        is_match = user_nudge == current_window
+        nudge_h, nudge_m = (int(part) for part in user_nudge.split(":"))
+        user_minutes = nudge_h * 60 + nudge_m
+        is_match = window_start_minutes <= user_minutes <= window_end_minutes
         print(
             f"User {user['display_name']}: nudge_time={user_nudge}, "
-            f"current_window={current_window}-{current_window}, match={is_match}"
+            f"current_window={window_start_h:02d}:{window_start_m:02d}-{window_end_h:02d}:{window_end_m:02d}, "
+            f"match={is_match}"
         )
         if not is_match:
             continue
