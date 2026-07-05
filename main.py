@@ -6,7 +6,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 from config import TELEGRAM_BOT_TOKEN
 from bot.capture_bot import (
     start, stop, remindertime, nudgetime,
-    handle_text, handle_voice, handle_photo, handle_rating, handle_nudge_action,
+    handle_text, handle_voice, handle_photo, handle_rating,
+    handle_nudge_action, handle_nudge_list_tap,
 )
 from notifications.nightly_reminder import send_nightly_reminder
 from notifications.daily_nudge import send_daily_nudge
@@ -19,8 +20,9 @@ def main():
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("remindertime", remindertime))
     app.add_handler(CommandHandler("nudgetime", nudgetime))
-    app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_"))
-    app.add_handler(CallbackQueryHandler(handle_rating))
+    app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))
+    app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_(done|archive|remind|keep|drop|back)_"))
+    app.add_handler(CallbackQueryHandler(handle_rating, pattern="^(interest_|goal_)"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
