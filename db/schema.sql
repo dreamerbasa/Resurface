@@ -21,7 +21,8 @@ CREATE TABLE items (
     processed_at TIMESTAMPTZ,
     image_path TEXT,
     interest INTEGER DEFAULT 2,
-    goal_alignment INTEGER DEFAULT 1
+    goal_alignment INTEGER DEFAULT 1,
+    user_id UUID REFERENCES users(id)
 );
 
 -- 3. Seed default categories
@@ -36,3 +37,16 @@ INSERT INTO categories (name, description) VALUES
     ('motivation', 'Motivational quotes, inspiring posts, life advice'),
     ('song', 'Music recommendations, songs to listen to, playlists'),
     ('random_thought', 'Miscellaneous ideas, observations, thoughts that do not fit other categories');
+
+-- Users Table
+CREATE TABLE users (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    telegram_user_id BIGINT NOT NULL UNIQUE,
+    chat_id BIGINT NOT NULL,
+    display_name TEXT,
+    is_active BOOLEAN DEFAULT true,
+    reminder_time TIME DEFAULT '22:00',
+    nudge_time TIME DEFAULT '08:30',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    last_active_at TIMESTAMPTZ DEFAULT now()
+);

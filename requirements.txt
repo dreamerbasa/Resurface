@@ -7,3 +7,4 @@ openai
 trafilatura
 requests
 youtube-transcript-api
+pytz

@@ -10,7 +10,7 @@ from db.queries import insert_item
 _URL_PATTERN = __import__("re").compile(r"https?://[^\s<>\"']+")
 
 
-def _process_single(extracted_data: dict) -> dict:
+def _process_single(extracted_data: dict, user_id: str = None) -> dict:
     if extracted_data.get("needs_screenshot"):
         return {
             "status": "needs_screenshot",
@@ -30,6 +30,8 @@ def _process_single(extracted_data: dict) -> dict:
         "status": "fresh",
         "processed_at": datetime.utcnow().isoformat(),
     }
+    if user_id:
+        item["user_id"] = user_id
 
     inserted = insert_item(item)
 
@@ -42,7 +44,7 @@ def _process_single(extracted_data: dict) -> dict:
     }
 
 
-def process_message(raw_content: str, content_type: str = "text", file_path: str = None):
+def process_message(raw_content: str, content_type: str = "text", file_path: str = None, user_id: str = None):
     if content_type == "text":
         urls = url_extractor.find_urls(raw_content)
 
@@ -55,7 +57,7 @@ def process_message(raw_content: str, content_type: str = "text", file_path: str
             results = []
             for u in urls:
                 extracted_data = url_extractor.extract_single(u, user_note)
-                results.append(_process_single(extracted_data))
+                results.append(_process_single(extracted_data, user_id))
             return results
 
         if len(urls) == 1:
@@ -70,4 +72,4 @@ def process_message(raw_content: str, content_type: str = "text", file_path: str
     else:
         raise ValueError(f"Unsupported content type: {content_type}")
 
-    return _process_single(extracted_data)
+    return _process_single(extracted_data, user_id)
