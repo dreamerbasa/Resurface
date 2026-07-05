@@ -92,16 +92,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=update.effective_chat.id,
         display_name=update.effective_user.first_name,
     )
-    if user and not user.get("is_active"):
-        set_user_active(update.effective_user.id, True)
+    if user:
+        if not user.get("is_active"):
+            set_user_active(update.effective_user.id, True)
         await update.message.reply_text(
-            "Welcome back! Nudges and reminders resumed."
+            "Welcome back to Dropzone! \U0001f4e6 Nudges resumed.\n\n"
+            "*Commands:*\n"
+            "/review — see your pending items\n"
+            "/categories — view your categories\n"
+            "/search \\[keyword\\] — find saved items\n"
+            "/stats — your numbers\n"
+            "/nudgetime HH:MM — set morning nudge time\n"
+            "/remindertime HH:MM — set nightly reminder time\n"
+            "/stop — pause all nudges\n"
+            "/start — resume nudges",
+            parse_mode="Markdown",
         )
     else:
         await update.message.reply_text(
-            "Hey! I'm your Resurface bot. Send me anything — "
-            "ideas, links, screenshots, voice notes — and I'll "
-            "organize it for you."
+            "Welcome to Dropzone! \U0001f4e6\n\n"
+            "Your second brain. Dump everything, forget nothing.\n\n"
+            "Send me anything — screenshots, links, voice notes, ideas — "
+            "and I'll organize it, remember it, and remind you when it matters.\n\n"
+            "*What I can handle:*\n"
+            "\U0001f4f8 Screenshots — I read the text, ignore the clutter\n"
+            "\U0001f517 Links — articles, YouTube, Substack\n"
+            "\U0001f3a4 Voice notes — transcribed and categorized\n"
+            "\U0001f4ac Text — ideas, thoughts, anything\n\n"
+            "After each save, I'll ask you to rate:\n"
+            "→ How interested are you?\n"
+            "→ Does it align with your goals?\n\n"
+            "*Commands:*\n"
+            "/review — see your pending items\n"
+            "/categories — view your categories\n"
+            "/search \\[keyword\\] — find saved items\n"
+            "/stats — your numbers\n"
+            "/nudgetime HH:MM — set morning nudge time\n"
+            "/remindertime HH:MM — set nightly reminder time\n"
+            "/stop — pause all nudges\n"
+            "/start — resume nudges\n\n"
+            "Just start sharing. I'll handle the rest.",
+            parse_mode="Markdown",
         )
 
 
