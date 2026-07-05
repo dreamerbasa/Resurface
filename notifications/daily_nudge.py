@@ -46,13 +46,25 @@ def _format_item_text(item: dict) -> str:
 
 
 async def send_daily_nudge(context):
+    print(f"Nudge check running at {datetime.utcnow()} UTC")
+
     current_window = _current_ist_time()
     users = get_active_users()
+    print(f"Active users found: {len(users)}")
+
+    any_match = False
 
     for user in users:
         user_nudge = user.get("nudge_time", "08:30")
-        if user_nudge != current_window:
+        is_match = user_nudge == current_window
+        print(
+            f"User {user['display_name']}: nudge_time={user_nudge}, "
+            f"current_window={current_window}-{current_window}, match={is_match}"
+        )
+        if not is_match:
             continue
+
+        any_match = True
 
         result = get_daily_items(user["id"])
         items = result.get("items", [])
@@ -89,3 +101,8 @@ async def send_daily_nudge(context):
                 update_after_surface(item["id"])
             except Exception:
                 pass
+
+        print(f"Sent {len(items)} nudge items to {user['display_name']}")
+
+    if not any_match:
+        print("No users matched current time window")

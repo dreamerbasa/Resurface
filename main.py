@@ -36,6 +36,7 @@ def main():
         interval=datetime.timedelta(minutes=30),
         first=datetime.timedelta(seconds=15),
     )
+    print("Daily nudge job registered, runs every 30 minutes")
 
     print("Bot is running...")
     app.run_polling()
