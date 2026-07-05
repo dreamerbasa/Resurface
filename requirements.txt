@@ -8,3 +8,4 @@ trafilatura
 requests
 youtube-transcript-api
 pytz
+python-dateutil

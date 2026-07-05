@@ -22,7 +22,10 @@ CREATE TABLE items (
     image_path TEXT,
     interest INTEGER DEFAULT 2,
     goal_alignment INTEGER DEFAULT 1,
-    user_id UUID REFERENCES users(id)
+    user_id UUID REFERENCES users(id),
+    times_surfaced INTEGER DEFAULT 0,
+    last_surfaced_at TIMESTAMPTZ,
+    resurface_after TIMESTAMPTZ
 );
 
 -- 3. Seed default categories

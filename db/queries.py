@@ -76,3 +76,29 @@ def get_user_items_today(user_id: str):
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     response = supabase.table("items").select("id").eq("user_id", user_id).gte("created_at", today_start).execute()
     return response.data
+
+
+def update_after_surface(item_id: str):
+    from datetime import timedelta
+
+    response = supabase.table("items").select("times_surfaced, goal_alignment").eq("id", item_id).execute()
+    if not response.data:
+        return
+    item = response.data[0]
+    times_surfaced = (item.get("times_surfaced") or 0) + 1
+    goal = item.get("goal_alignment") or 1
+    now = datetime.now(timezone.utc)
+
+    update_data = {
+        "times_surfaced": times_surfaced,
+        "last_surfaced_at": now.isoformat(),
+        "status": "surfaced",
+    }
+
+    if goal < 3:
+        if times_surfaced == 3:
+            update_data["resurface_after"] = (now + timedelta(days=7)).isoformat()
+        elif times_surfaced == 4:
+            update_data["resurface_after"] = (now + timedelta(days=30)).isoformat()
+
+    supabase.table("items").update(update_data).eq("id", item_id).execute()
