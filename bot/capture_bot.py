@@ -1,3 +1,5 @@
+import asyncio
+import io
 import tempfile
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -8,8 +10,10 @@ from pipeline.router import process_message
 from db.queries import (
     update_item_rating, get_item, upsert_user, get_user_by_telegram_id,
     update_last_active, set_user_active, update_reminder_time, update_nudge_time,
-    archive_item, done_item, remind_later, keep_item,
+    archive_item, done_item, remind_later, keep_item, get_image_bytes,
 )
+from notifications.daily_nudge import build_list_view, build_detail_view
+from notifications.nudge_session import get_session
 
 
 def _is_authorized(update: Update) -> bool:
@@ -309,6 +313,78 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+_EXPIRED_NUDGE_TEXT = "This nudge has expired. You'll get a fresh one next time!"
+
+_NUDGE_ACTIONS = {
+    "done": (done_item, "✅ {title} — marked as done", "done"),
+    "archive": (archive_item, "📦 {title} — archived", "archived"),
+    "remind": (lambda item_id: remind_later(item_id, days=3), "⏰ {title} — I'll remind you in 3 days", "remind"),
+    "keep": (keep_item, "🔖 {title} — keeping it, back in 7 days", "kept"),
+    "drop": (archive_item, "📦 {title} — dropped", "archived"),
+}
+
+
+async def _render_nudge_list(query, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    session = get_session(chat_id)
+    if not session:
+        text, keyboard = _EXPIRED_NUDGE_TEXT, None
+    else:
+        text, keyboard = build_list_view(session)
+
+    if query.message.photo:
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await context.bot.send_message(
+            chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown"
+        )
+    else:
+        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="Markdown")
+
+
+async def handle_nudge_list_tap(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
+    query = update.callback_query
+    await query.answer()
+
+    item_id = query.data.split("_", 1)[1]
+    chat_id = query.message.chat_id
+    session = get_session(chat_id)
+    if not session or item_id not in session["items"]:
+        await query.edit_message_text(_EXPIRED_NUDGE_TEXT)
+        return
+
+    item = session["items"][item_id]
+    text, keyboard = build_detail_view(item)
+
+    if item.get("content_type") == "image":
+        image_bytes = get_image_bytes(item["image_path"]) if item.get("image_path") else None
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        if image_bytes:
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=io.BytesIO(image_bytes),
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="Markdown",
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{text}\n\n_Original screenshot no longer available._",
+                reply_markup=keyboard,
+                parse_mode="Markdown",
+            )
+    else:
+        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="Markdown")
+
+
 async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         await update.callback_query.answer("Not authorized.")
@@ -316,26 +392,36 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
 
-    data = query.data
-    parts = data.split("_", 2)
+    parts = query.data.split("_", 2)
     action = parts[1]
-    item_id = parts[2]
+    chat_id = query.message.chat_id
 
-    if action == "archive":
-        archive_item(item_id)
-        await query.edit_message_text("Archived ✓")
-    elif action == "remind":
-        remind_later(item_id, days=3)
-        await query.edit_message_text("Got it, I'll remind you in 3 days ✓")
-    elif action == "done":
-        done_item(item_id)
-        await query.edit_message_text("Nice, marked as done ✓")
-    elif action == "keep":
-        keep_item(item_id)
-        await query.edit_message_text("Keeping it. I'll bring it back in a week ✓")
-    elif action == "drop":
-        archive_item(item_id)
-        await query.edit_message_text("Dropped ✓")
+    if action == "back":
+        await _render_nudge_list(query, context, chat_id)
+        return
+
+    item_id = parts[2]
+    meta = _NUDGE_ACTIONS.get(action)
+    if meta is None:
+        return
+    fn, confirm_template, acted_status = meta
+
+    fn(item_id)
+
+    session = get_session(chat_id)
+    title = "Item"
+    if session and item_id in session["items"]:
+        title = session["items"][item_id]["title"]
+        session["acted"][item_id] = acted_status
+
+    confirm_text = confirm_template.format(title=title)
+    if query.message.photo:
+        await query.edit_message_caption(caption=confirm_text)
+    else:
+        await query.edit_message_text(confirm_text)
+
+    await asyncio.sleep(2)
+    await _render_nudge_list(query, context, chat_id)
 
 
 def run_bot():
@@ -344,6 +430,7 @@ def run_bot():
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("remindertime", remindertime))
     app.add_handler(CommandHandler("nudgetime", nudgetime))
+    app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))
     app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_"))
     app.add_handler(CallbackQueryHandler(handle_rating))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

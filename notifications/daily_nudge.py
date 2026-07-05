@@ -4,6 +4,15 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from db.queries import get_active_users, update_after_surface
 from intelligence.scoring import get_daily_items
+from notifications.nudge_session import set_session, get_session
+
+
+_ACTED_MARKER = {
+    "done": ("✅", "done"),
+    "archived": ("📦", "archived"),
+    "kept": ("🔖", "kept, back in 7 days"),
+    "remind": ("⏰", "remind in 3 days"),
+}
 
 
 def _current_window_minutes() -> tuple[int, int]:
@@ -14,34 +23,85 @@ def _current_window_minutes() -> tuple[int, int]:
     return window_start_minutes, window_end_minutes
 
 
-def _build_keyboard(item: dict) -> InlineKeyboardMarkup:
-    item_id = item["id"]
+def _list_line(number: int, item: dict) -> str:
+    has_url = bool(item.get("url"))
+    title = f"[{item['title']}]({item['url']})" if has_url else item["title"]
+    arrow = " ↗" if has_url else ""
+    return (
+        f"{number}. {item['emoji']} {title}{arrow}\n"
+        f"   {item['category_name']} · {item['age_days']:.0f}d ago"
+    )
 
-    if item.get("is_escalation"):
-        buttons = [
+
+def build_list_view(session: dict) -> tuple[str, InlineKeyboardMarkup | None]:
+    order = session["order"]
+    items = session["items"]
+    acted = session["acted"]
+
+    pending_ids = [item_id for item_id in order if item_id not in acted]
+    if not pending_ids:
+        return "☀️ All done for today! 🎉", None
+
+    lines = [session["header"], ""]
+    number_buttons = []
+    for idx, item_id in enumerate(order, start=1):
+        item = items[item_id]
+        if item_id in acted:
+            marker, word = _ACTED_MARKER.get(acted[item_id], ("✅", "done"))
+            lines.append(f"{idx}. {marker} {item['title']} — {word}")
+        else:
+            lines.append(_list_line(idx, item))
+            number_buttons.append(
+                InlineKeyboardButton(f"  {idx}  ", callback_data=f"nudgelist_{item_id}")
+            )
+
+    text = "\n".join(lines)
+    keyboard = InlineKeyboardMarkup([number_buttons]) if number_buttons else None
+    return text, keyboard
+
+
+def _detail_body(item: dict) -> str:
+    content_type = item.get("content_type")
+    if content_type == "url":
+        header_line = f"{item['emoji']} [{item['title']}]({item['url']})"
+        content = item.get("summary") or ""
+    elif content_type == "voice":
+        header_line = f"{item['emoji']} {item['title']}"
+        content = f"🎤 Transcription:\n{item.get('extracted_text') or ''}"
+    elif content_type == "image":
+        header_line = f"{item['emoji']} {item['title']}"
+        content = (item.get("extracted_text") or "")[:500]
+    else:
+        header_line = f"{item['emoji']} {item['title']}"
+        content = item.get("raw_content") or ""
+
+    meta_line = f"{item['category_name']} · {item['age_days']:.0f}d ago"
+    return f"{header_line}\n{meta_line}\n\n{content}"
+
+
+def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
+    item_id = item["id"]
+    if item["is_escalation"]:
+        rows = [
             [
-                InlineKeyboardButton("Keep", callback_data=f"nudge_keep_{item_id}"),
-                InlineKeyboardButton("Drop", callback_data=f"nudge_drop_{item_id}"),
-            ]
+                InlineKeyboardButton("Keep — remind in 7 days", callback_data=f"nudge_keep_{item_id}"),
+                InlineKeyboardButton("Drop — archive it", callback_data=f"nudge_drop_{item_id}"),
+            ],
         ]
     else:
-        row = [
-            InlineKeyboardButton("Archive", callback_data=f"nudge_archive_{item_id}"),
-            InlineKeyboardButton("Remind later", callback_data=f"nudge_remind_{item_id}"),
-            InlineKeyboardButton("Done", callback_data=f"nudge_done_{item_id}"),
+        rows = [
+            [
+                InlineKeyboardButton("✅ Done", callback_data=f"nudge_done_{item_id}"),
+                InlineKeyboardButton("📦 Archive", callback_data=f"nudge_archive_{item_id}"),
+                InlineKeyboardButton("⏰ Later", callback_data=f"nudge_remind_{item_id}"),
+            ],
         ]
-        buttons = [row]
-        if item.get("url"):
-            buttons.append([InlineKeyboardButton("Open link", url=item["url"])])
-
-    return InlineKeyboardMarkup(buttons)
+    rows.append([InlineKeyboardButton("← Back to list", callback_data=f"nudge_back_{item_id}")])
+    return InlineKeyboardMarkup(rows)
 
 
-def _format_item_text(item: dict) -> str:
-    line = f"{item['emoji']} *{item['title']}* · {item['category_name']} · {item['age_days']:.0f}d ago"
-    if item.get("is_escalation"):
-        line += f"\n⚠️ You've seen this {item['times_surfaced']} times. Keep or drop?"
-    return line
+def build_detail_view(item: dict) -> tuple[str, InlineKeyboardMarkup]:
+    return _detail_body(item), _detail_keyboard(item)
 
 
 async def send_daily_nudge(context):
@@ -81,31 +141,22 @@ async def send_daily_nudge(context):
         if result.get("is_first_week"):
             header = "Getting started — here are your items to look at:"
         elif result.get("is_weekend_catchup"):
-            header = (
-                f"\U0001f4e6 Weekend catch-up — you have {result['total_pending']} unseen items\n\n"
-                f"Top {len(items)} to review:"
-            )
+            header = f"📦 Weekend catch-up — you have {result['total_pending']} unseen items"
         else:
-            header = f"☀️ Your {len(items)} item{'s' if len(items) != 1 else ''} for today"
+            header = f"☀️ Your {len(items)} items for today"
+
+        set_session(chat_id, items, header)
+        text, keyboard = build_list_view(get_session(chat_id))
 
         try:
-            await context.bot.send_message(chat_id=chat_id, text=header)
+            await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown"
+            )
         except Exception:
             continue
 
         for item in items:
-            text = _format_item_text(item)
-            keyboard = _build_keyboard(item)
-            try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=keyboard,
-                    parse_mode="Markdown",
-                )
-                update_after_surface(item["id"])
-            except Exception:
-                pass
+            update_after_surface(item["id"])
 
         print(f"Sent {len(items)} nudge items to {user['display_name']}")
 

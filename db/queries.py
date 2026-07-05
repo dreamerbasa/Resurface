@@ -78,12 +78,35 @@ def get_user_items_today(user_id: str):
     return response.data
 
 
+def _delete_item_image(item_id: str):
+    response = supabase.table("items").select("image_path").eq("id", item_id).execute()
+    image_path = response.data[0]["image_path"] if response.data else None
+    if not image_path:
+        return
+    try:
+        supabase.storage.from_("images").remove([image_path])
+    except Exception:
+        return
+    supabase.table("items").update({"image_path": None}).eq("id", item_id).execute()
+
+
+def get_image_bytes(image_path: str):
+    try:
+        return supabase.storage.from_("images").download(image_path)
+    except Exception:
+        return None
+
+
 def archive_item(item_id: str):
+    # Images are kept in Storage for active items and only deleted once an item
+    # is archived or acted on, rather than on a fixed 72h timer.
     supabase.table("items").update({"status": "archived"}).eq("id", item_id).execute()
+    _delete_item_image(item_id)
 
 
 def done_item(item_id: str):
     supabase.table("items").update({"status": "acted_on"}).eq("id", item_id).execute()
+    _delete_item_image(item_id)
 
 
 def remind_later(item_id: str, days: int = 3):
