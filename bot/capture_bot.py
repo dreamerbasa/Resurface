@@ -103,8 +103,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/categories — view your categories\n"
             "/search \\[keyword\\] — find saved items\n"
             "/stats — your numbers\n"
-            "/nudgetime HH:MM — set morning nudge time\n"
-            "/remindertime HH:MM — set nightly reminder time\n"
+            "/nudgetime HH:MM — set morning nudge time (on the hour or half hour)\n"
+            "/remindertime HH:MM — set nightly reminder time (on the hour or half hour)\n"
             "/stop — pause all nudges\n"
             "/start — resume nudges",
             parse_mode="Markdown",
@@ -128,8 +128,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/categories — view your categories\n"
             "/search \\[keyword\\] — find saved items\n"
             "/stats — your numbers\n"
-            "/nudgetime HH:MM — set morning nudge time\n"
-            "/remindertime HH:MM — set nightly reminder time\n"
+            "/nudgetime HH:MM — set morning nudge time (on the hour or half hour)\n"
+            "/remindertime HH:MM — set nightly reminder time (on the hour or half hour)\n"
             "/stop — pause all nudges\n"
             "/start — resume nudges\n\n"
             "Just start sharing. I'll handle the rest.",
@@ -165,8 +165,13 @@ async def remindertime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (ValueError, IndexError):
         await update.message.reply_text("Invalid time format. Use HH:MM (e.g. 22:00)")
         return
+    if m not in (0, 30):
+        await update.message.reply_text(
+            "Times must be on the hour or half hour (e.g. 8:00, 8:30, 9:00). Pick the closest one!"
+        )
+        return
     update_reminder_time(update.effective_user.id, formatted)
-    await update.message.reply_text(f"Nightly reminder set to {formatted}. I'll check in with you then.")
+    await update.message.reply_text(f"Nightly reminder set to {formatted} ✓")
 
 
 async def nudgetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -186,8 +191,13 @@ async def nudgetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (ValueError, IndexError):
         await update.message.reply_text("Invalid time format. Use HH:MM (e.g. 08:30)")
         return
+    if m not in (0, 30):
+        await update.message.reply_text(
+            "Times must be on the hour or half hour (e.g. 8:00, 8:30, 9:00). Pick the closest one!"
+        )
+        return
     update_nudge_time(update.effective_user.id, formatted)
-    await update.message.reply_text(f"Morning nudge set to {formatted}.")
+    await update.message.reply_text(f"Morning nudge set to {formatted} ✓")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
