@@ -78,6 +78,29 @@ def get_user_items_today(user_id: str):
     return response.data
 
 
+def archive_item(item_id: str):
+    supabase.table("items").update({"status": "archived"}).eq("id", item_id).execute()
+
+
+def done_item(item_id: str):
+    supabase.table("items").update({"status": "acted_on"}).eq("id", item_id).execute()
+
+
+def remind_later(item_id: str, days: int = 3):
+    from datetime import timedelta
+    resurface_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    supabase.table("items").update({"resurface_after": resurface_at}).eq("id", item_id).execute()
+
+
+def keep_item(item_id: str):
+    from datetime import timedelta
+    resurface_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    supabase.table("items").update({
+        "times_surfaced": 0,
+        "resurface_after": resurface_at,
+    }).eq("id", item_id).execute()
+
+
 def update_after_surface(item_id: str):
     from datetime import timedelta
 

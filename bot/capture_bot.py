@@ -8,6 +8,7 @@ from pipeline.router import process_message
 from db.queries import (
     update_item_rating, get_item, upsert_user, get_user_by_telegram_id,
     update_last_active, set_user_active, update_reminder_time, update_nudge_time,
+    archive_item, done_item, remind_later, keep_item,
 )
 
 
@@ -298,12 +299,42 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    parts = data.split("_", 2)
+    action = parts[1]
+    item_id = parts[2]
+
+    if action == "archive":
+        archive_item(item_id)
+        await query.edit_message_text("Archived ✓")
+    elif action == "remind":
+        remind_later(item_id, days=3)
+        await query.edit_message_text("Got it, I'll remind you in 3 days ✓")
+    elif action == "done":
+        done_item(item_id)
+        await query.edit_message_text("Nice, marked as done ✓")
+    elif action == "keep":
+        keep_item(item_id)
+        await query.edit_message_text("Keeping it. I'll bring it back in a week ✓")
+    elif action == "drop":
+        archive_item(item_id)
+        await query.edit_message_text("Dropped ✓")
+
+
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("remindertime", remindertime))
     app.add_handler(CommandHandler("nudgetime", nudgetime))
+    app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_"))
     app.add_handler(CallbackQueryHandler(handle_rating))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
