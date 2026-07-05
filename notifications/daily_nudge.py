@@ -131,34 +131,39 @@ async def send_daily_nudge(context):
 
         any_match = True
 
-        result = get_daily_items(user["id"])
-        items = result.get("items", [])
-        if not items:
-            continue
-
-        chat_id = user["chat_id"]
-
-        if result.get("is_first_week"):
-            header = "Getting started — here are your items to look at:"
-        elif result.get("is_weekend_catchup"):
-            header = f"📦 Weekend catch-up — you have {result['total_pending']} unseen items"
-        else:
-            header = f"☀️ Your {len(items)} items for today"
-
-        set_session(chat_id, items, header)
-        text, keyboard = build_list_view(get_session(chat_id))
+        print(f"Time matched for {user['display_name']}, fetching nudge items...")
 
         try:
+            result = get_daily_items(user["id"])
+            print(f"get_daily_items returned: {len(result.get('items', []))} items")
+            items = result.get("items", [])
+            if not items:
+                print(f"No items to nudge for {user['display_name']}")
+                continue
+
+            chat_id = user["chat_id"]
+
+            if result.get("is_first_week"):
+                header = "Getting started — here are your items to look at:"
+            elif result.get("is_weekend_catchup"):
+                header = f"📦 Weekend catch-up — you have {result['total_pending']} unseen items"
+            else:
+                header = f"☀️ Your {len(items)} items for today"
+
+            set_session(chat_id, items, header)
+            text, keyboard = build_list_view(get_session(chat_id))
+
             await context.bot.send_message(
                 chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown"
             )
-        except Exception:
-            continue
 
-        for item in items:
-            update_after_surface(item["id"])
+            for item in items:
+                update_after_surface(item["id"])
 
-        print(f"Sent {len(items)} nudge items to {user['display_name']}")
+            print(f"Sent {len(items)} nudge items to {user['display_name']}")
+            print(f"Successfully sent nudge to {user['display_name']}")
+        except Exception as e:
+            print(f"ERROR sending nudge to {user['display_name']}: {type(e).__name__}: {e}")
 
     if not any_match:
         print("No users matched current time window")
