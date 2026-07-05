@@ -57,7 +57,8 @@ async def send_daily_nudge(context):
 
     for user in users:
         user_nudge = user.get("nudge_time", "08:30")
-        nudge_h, nudge_m = (int(part) for part in user_nudge.split(":"))
+        nudge_parts = user_nudge.split(":")
+        nudge_h, nudge_m = int(nudge_parts[0]), int(nudge_parts[1])
         user_minutes = nudge_h * 60 + nudge_m
         is_match = window_start_minutes <= user_minutes <= window_end_minutes
         print(
