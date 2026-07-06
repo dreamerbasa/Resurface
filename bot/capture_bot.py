@@ -13,13 +13,25 @@ from db.queries import (
     update_item_rating, get_item, upsert_user, get_user_by_telegram_id,
     update_last_active, set_user_active, update_reminder_time, update_nudge_time,
     archive_item, done_item, remind_later, keep_item, get_image_bytes,
+    get_pending_items,
 )
-from notifications.daily_nudge import build_list_view, build_detail_view
-from notifications.nudge_session import get_session
+from intelligence.scoring import _get_emoji, _extract_url, _PRIORITY_MATRIX
+from notifications.daily_nudge import build_list_view, build_detail_view, escape_html, _list_line
+from notifications.nudge_session import get_session, set_session
+from notifications.pinned_queue import update_pinned_queue
 
 
 def _is_authorized(update: Update) -> bool:
     return update.effective_user.id in AUTHORIZED_USER_IDS
+
+
+async def _update_pinned(bot, telegram_user_id: int):
+    user = get_user_by_telegram_id(telegram_user_id)
+    if user:
+        try:
+            await update_pinned_queue(bot, user)
+        except Exception as e:
+            print(f"Pinned queue update error: {e}")
 
 
 def _get_user_id(update: Update) -> str:
@@ -249,6 +261,94 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+def _format_review_item(item: dict, now) -> dict:
+    from dateutil.parser import isoparse
+    created_at = isoparse(item["created_at"]) if isinstance(item.get("created_at"), str) else item.get("created_at", now)
+    age_days = round((now - created_at).total_seconds() / 86400, 1)
+    times_surfaced = item.get("times_surfaced", 0)
+    interest = item.get("interest", 2)
+    goal = item.get("goal_alignment", 1)
+    return {
+        "id": item["id"],
+        "title": item.get("title") or "Untitled",
+        "summary": item.get("summary"),
+        "category_name": item.get("category_name"),
+        "interest": interest,
+        "goal_alignment": goal,
+        "age_days": age_days,
+        "times_surfaced": times_surfaced,
+        "is_escalation": times_surfaced >= 3,
+        "emoji": _get_emoji(item),
+        "url": _extract_url(item.get("raw_content")) if item.get("content_type") == "url" else None,
+        "content_type": item.get("content_type"),
+        "raw_content": item.get("raw_content"),
+        "extracted_text": item.get("extracted_text"),
+        "image_path": item.get("image_path"),
+        "_weight": _PRIORITY_MATRIX.get((interest, goal), 1),
+    }
+
+
+async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
+    user_id = _get_user_id(update)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    days = None
+    if context.args:
+        try:
+            days = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("Usage: /review or /review 7 (number of days)")
+            return
+
+    raw_items = get_pending_items(user_id, days=days)
+    if not raw_items:
+        await update.message.reply_text("Nothing pending! You're all caught up. 🎉")
+        return
+
+    formatted = [_format_review_item(item, now) for item in raw_items]
+    formatted.sort(key=lambda x: (-int(x["times_surfaced"] == 0), -x["_weight"]))
+
+    total = len(formatted)
+    display_items = formatted[:10]
+
+    if days:
+        header = f"📋 Items from the last {days} days — {total} pending"
+    else:
+        header = f"📋 Your review queue — {total} item{'s' if total != 1 else ''} pending"
+
+    set_session(update.effective_chat.id, display_items, header)
+    session = get_session(update.effective_chat.id)
+    text, _ = build_list_view(session)
+
+    if total > 10:
+        text += f"\n\nShowing 10 of {total}. Use /review 7 to filter by recent days."
+
+    button_items = display_items[:5]
+    row1 = []
+    row2 = []
+    for idx, item in enumerate(button_items, start=1):
+        btn = InlineKeyboardButton(f"  {idx}  ", callback_data=f"nudgelist_{item['id']}")
+        if idx <= 3:
+            row1.append(btn)
+        else:
+            row2.append(btn)
+    rows = [row1]
+    if row2:
+        rows.append(row2)
+    keyboard = InlineKeyboardMarkup(rows)
+
+    await update.message.reply_text(
+        _truncate(text),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         await update.message.reply_text("Sorry, this is a private bot.")
@@ -260,6 +360,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(result["message"])
             return
         await _send_save_response(update.message, result)
+        await _update_pinned(context.bot, update.effective_user.id)
     except Exception as e:
         await update.message.reply_text(f"Something went wrong: {e}")
 
@@ -283,6 +384,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
         )
         await _send_save_response(update.message, result)
+        await _update_pinned(context.bot, update.effective_user.id)
     except Exception as e:
         await update.message.reply_text(f"Something went wrong: {e}")
 
@@ -307,6 +409,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
         )
         await _send_save_response(update.message, result)
+        await _update_pinned(context.bot, update.effective_user.id)
     except Exception as e:
         await update.message.reply_text(f"Something went wrong: {e}")
 
@@ -470,6 +573,8 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         if "not modified" not in str(e).lower():
             print(f"Edit error: {e}")
 
+    await _update_pinned(context.bot, update.effective_user.id)
+
 
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
@@ -496,6 +601,7 @@ def run_bot():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
+    app.add_handler(CommandHandler("review", review))
     app.add_handler(reminder_conv)
     app.add_handler(nudge_conv)
     app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))
