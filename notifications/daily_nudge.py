@@ -34,8 +34,12 @@ def _current_window_minutes() -> tuple[int, int]:
 def _list_line(number: int, item: dict) -> str:
     title = escape_html(item["title"])
     category = escape_html(item["category_name"])
+    if item.get("content_type") == "url" and item.get("url"):
+        title_display = f"<a href='{item['url']}'>{title}</a>"
+    else:
+        title_display = title
     return (
-        f"{number}. {item['emoji']} {title}\n"
+        f"{number}. {item['emoji']} {title_display}\n"
         f"   {category} · {item['age_days']:.0f}d ago"
     )
 

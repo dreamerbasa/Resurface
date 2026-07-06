@@ -1,10 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ConversationHandler, filters,
+)
 
 from config import TELEGRAM_BOT_TOKEN
 from bot.capture_bot import (
-    start, stop, remindertime, nudgetime,
+    start, stop, remindertime, nudgetime, cancel,
+    _receive_reminder_time, _receive_nudge_time,
+    AWAITING_REMINDER_TIME, AWAITING_NUDGE_TIME,
     handle_text, handle_voice, handle_photo, handle_rating,
     handle_nudge_action, handle_nudge_list_tap,
 )
@@ -26,10 +31,30 @@ def _seconds_until_next_boundary() -> float:
 def main():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
+    reminder_conv = ConversationHandler(
+        entry_points=[CommandHandler("remindertime", remindertime)],
+        states={
+            AWAITING_REMINDER_TIME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _receive_reminder_time),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    nudge_conv = ConversationHandler(
+        entry_points=[CommandHandler("nudgetime", nudgetime)],
+        states={
+            AWAITING_NUDGE_TIME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _receive_nudge_time),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
-    app.add_handler(CommandHandler("remindertime", remindertime))
-    app.add_handler(CommandHandler("nudgetime", nudgetime))
+    app.add_handler(reminder_conv)
+    app.add_handler(nudge_conv)
     app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))
     app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_(done|archive|remind|keep|drop|back)_"))
     app.add_handler(CallbackQueryHandler(handle_rating, pattern="^(interest_|goal_)"))
