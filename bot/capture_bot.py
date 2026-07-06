@@ -1,4 +1,3 @@
-import asyncio
 import io
 import tempfile
 
@@ -32,6 +31,8 @@ def _get_user_id(update: Update) -> str:
             chat_id=update.effective_chat.id,
             display_name=update.effective_user.first_name,
         )
+    if not user:
+        raise ValueError("Could not create or find user")
     return user["id"]
 
 
@@ -54,6 +55,12 @@ def _rating_keyboard(item_id: str) -> InlineKeyboardMarkup:
     ])
 
 
+def _truncate(text: str, limit: int = 3500) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "... (truncated)"
+
+
 async def _send_save_response(message, result):
     if isinstance(result, list):
         saved = []
@@ -68,7 +75,7 @@ async def _send_save_response(message, result):
             lines = [f"Saved {len(saved)} item{'s' if len(saved) > 1 else ''}:"]
             for i, r in enumerate(saved, 1):
                 lines.append(f"{i}. {r['category_name']}: {r['title']}")
-            await message.reply_text("\n".join(lines))
+            await message.reply_text(_truncate("\n".join(lines)))
 
             for r in saved:
                 await message.reply_text(
@@ -454,19 +461,14 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     fn(item_id)
 
     session = get_session(chat_id)
-    title = "Item"
     if session and item_id in session["items"]:
-        title = session["items"][item_id]["title"]
         session["acted"][item_id] = acted_status
 
-    confirm_text = confirm_template.format(title=title)
-    if query.message.photo:
-        await query.edit_message_caption(caption=confirm_text)
-    else:
-        await query.edit_message_text(confirm_text)
-
-    await asyncio.sleep(2)
-    await _render_nudge_list(query, context, chat_id)
+    try:
+        await _render_nudge_list(query, context, chat_id)
+    except Exception as e:
+        if "not modified" not in str(e).lower():
+            print(f"Edit error: {e}")
 
 
 def run_bot():

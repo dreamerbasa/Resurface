@@ -71,6 +71,12 @@ def build_list_view(session: dict) -> tuple[str, InlineKeyboardMarkup | None]:
     return text, keyboard
 
 
+def _truncate(text: str, limit: int = 3500) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "... (truncated)"
+
+
 def _detail_body(item: dict) -> str:
     title = escape_html(item["title"])
     meta_line = f"{escape_html(item['category_name'])} · {item['age_days']:.0f}d ago"
@@ -85,7 +91,8 @@ def _detail_body(item: dict) -> str:
     else:
         content = escape_html(item.get("raw_content") or "")
 
-    return f"{item['emoji']} {title}\n{meta_line}\n\n{content}"
+    body = f"{item['emoji']} {title}\n{meta_line}\n\n{content}"
+    return _truncate(body)
 
 
 def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:

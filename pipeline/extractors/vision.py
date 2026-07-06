@@ -35,11 +35,22 @@ VISUAL DESCRIPTION:
 
 
 def extract(image_file_path: str, raw_content: str = "") -> dict:
-    image_path = None
     try:
         with open(image_file_path, "rb") as f:
             file_data = f.read()
+    except Exception as e:
+        if os.path.exists(image_file_path):
+            os.remove(image_file_path)
+        return {
+            "content_type": "image",
+            "raw_content": raw_content or "screenshot",
+            "extracted_text": f"Could not read image file: {e}",
+            "source_platform": "telegram",
+            "image_path": None,
+        }
 
+    image_path = None
+    try:
         filename = f"screenshots/{uuid.uuid4()}.jpg"
         supabase.storage.from_("images").upload(filename, file_data)
         image_path = filename
