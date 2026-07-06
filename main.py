@@ -7,7 +7,7 @@ from telegram.ext import (
 
 from config import TELEGRAM_BOT_TOKEN
 from bot.capture_bot import (
-    start, stop, remindertime, nudgetime, cancel,
+    start, stop, remindertime, nudgetime, cancel, review,
     _receive_reminder_time, _receive_nudge_time,
     AWAITING_REMINDER_TIME, AWAITING_NUDGE_TIME,
     handle_text, handle_voice, handle_photo, handle_rating,
@@ -53,6 +53,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
+    app.add_handler(CommandHandler("review", review))
     app.add_handler(reminder_conv)
     app.add_handler(nudge_conv)
     app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))

@@ -5,6 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from db.queries import get_active_users, update_after_surface
 from intelligence.scoring import get_daily_items
 from notifications.nudge_session import set_session, get_session
+from notifications.pinned_queue import update_pinned_queue
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -182,6 +183,12 @@ async def send_daily_nudge(context):
                 update_after_surface(item["id"])
 
             print(f"Sent {len(items)} nudge items to {user['display_name']}")
+
+            try:
+                await update_pinned_queue(context.bot, user)
+            except Exception as e:
+                print(f"Pinned queue update error for {user['display_name']}: {e}")
+
             print(f"Successfully sent nudge to {user['display_name']}")
         except Exception as e:
             print(f"ERROR sending nudge to {user['display_name']}: {type(e).__name__}: {e}")

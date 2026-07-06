@@ -130,6 +130,54 @@ def keep_item(item_id: str):
     }).eq("id", item_id).execute()
 
 
+def get_pending_items(user_id: str, days: int = None) -> list:
+    now = datetime.now(timezone.utc)
+    query = (
+        supabase.table("items")
+        .select("*, categories(name)")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+    )
+    if days is not None:
+        cutoff = (now - timedelta(days=days)).isoformat()
+        query = query.gte("created_at", cutoff)
+    response = query.execute()
+
+    items = []
+    for item in response.data:
+        times_surfaced = item.get("times_surfaced") or 0
+        goal = item.get("goal_alignment") or 1
+
+        if times_surfaced >= 5 and goal < 3:
+            continue
+
+        resurface_after = item.get("resurface_after")
+        if resurface_after:
+            from dateutil.parser import isoparse
+            if isoparse(resurface_after) > now:
+                continue
+
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        item["times_surfaced"] = times_surfaced
+        item["goal_alignment"] = goal
+        item["interest"] = item.get("interest") or 2
+        items.append(item)
+
+    return items
+
+
+def get_pinned_message_id(user_id: str):
+    response = supabase.table("users").select("pinned_message_id").eq("id", user_id).execute()
+    if response.data:
+        return response.data[0].get("pinned_message_id")
+    return None
+
+
+def set_pinned_message_id(user_id: str, message_id: int):
+    supabase.table("users").update({"pinned_message_id": message_id}).eq("id", user_id).execute()
+
+
 def update_after_surface(item_id: str):
 
 
