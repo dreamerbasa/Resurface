@@ -34,8 +34,12 @@ def _current_window_minutes() -> tuple[int, int]:
 def _list_line(number: int, item: dict) -> str:
     title = escape_html(item["title"])
     category = escape_html(item["category_name"])
+    if item.get("content_type") == "url" and item.get("url"):
+        title_display = f"<a href='{item['url']}'>{title}</a>"
+    else:
+        title_display = title
     return (
-        f"{number}. {item['emoji']} {title}\n"
+        f"{number}. {item['emoji']} {title_display}\n"
         f"   {category} · {item['age_days']:.0f}d ago"
     )
 
@@ -112,7 +116,7 @@ def build_detail_view(item: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 
 async def send_daily_nudge(context):
-    print(f"Nudge check running at {datetime.utcnow()} UTC")
+    print(f"Nudge check running at {datetime.now(timezone.utc)} UTC")
 
     window_start_minutes, window_end_minutes = _current_window_minutes()
     window_start_h, window_start_m = divmod(window_start_minutes, 60)

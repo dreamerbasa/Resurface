@@ -3,7 +3,10 @@ import io
 import tempfile
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ContextTypes, ConversationHandler, filters,
+)
 
 from config import TELEGRAM_BOT_TOKEN, AUTHORIZED_USER_IDS
 from pipeline.router import process_message
@@ -152,56 +155,91 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+AWAITING_REMINDER_TIME, AWAITING_NUDGE_TIME = range(2)
+
+_TIME_INVALID_MSG = "That doesn't look right. Send a time like 08:00 or 08:30"
+
+
+def _parse_time(time_str: str) -> str | None:
+    try:
+        parts = time_str.strip().split(":")
+        h, m = int(parts[0]), int(parts[1])
+        if not (0 <= h <= 23 and m in (0, 30)):
+            return None
+        return f"{h:02d}:{m:02d}"
+    except (ValueError, IndexError):
+        return None
+
+
 async def remindertime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         await update.message.reply_text("Sorry, this is a private bot.")
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /remindertime HH:MM (e.g. /remindertime 22:00)")
-        return
-    time_str = context.args[0]
-    try:
-        parts = time_str.split(":")
-        h, m = int(parts[0]), int(parts[1])
-        if not (0 <= h <= 23 and 0 <= m <= 59):
-            raise ValueError
-        formatted = f"{h:02d}:{m:02d}"
-    except (ValueError, IndexError):
-        await update.message.reply_text("Invalid time format. Use HH:MM (e.g. 22:00)")
-        return
-    if m not in (0, 30):
-        await update.message.reply_text(
-            "Times must be on the hour or half hour (e.g. 8:00, 8:30, 9:00). Pick the closest one!"
-        )
-        return
+        return ConversationHandler.END
+    if context.args:
+        formatted = _parse_time(context.args[0])
+        if not formatted:
+            await update.message.reply_text(
+                "Invalid time. Use HH:MM on the hour or half hour (e.g. 22:00, 22:30)"
+            )
+            return ConversationHandler.END
+        update_reminder_time(update.effective_user.id, formatted)
+        await update.message.reply_text(f"Nightly reminder set to {formatted} ✓")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "What time should I send your nightly reminder?\n\n"
+        "Send the time in HH:MM format (on the hour or half hour).\n"
+        "Examples: 21:00, 21:30, 22:00"
+    )
+    return AWAITING_REMINDER_TIME
+
+
+async def _receive_reminder_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    formatted = _parse_time(update.message.text)
+    if not formatted:
+        await update.message.reply_text(_TIME_INVALID_MSG)
+        return AWAITING_REMINDER_TIME
     update_reminder_time(update.effective_user.id, formatted)
     await update.message.reply_text(f"Nightly reminder set to {formatted} ✓")
+    return ConversationHandler.END
 
 
 async def nudgetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         await update.message.reply_text("Sorry, this is a private bot.")
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /nudgetime HH:MM (e.g. /nudgetime 08:30)")
-        return
-    time_str = context.args[0]
-    try:
-        parts = time_str.split(":")
-        h, m = int(parts[0]), int(parts[1])
-        if not (0 <= h <= 23 and 0 <= m <= 59):
-            raise ValueError
-        formatted = f"{h:02d}:{m:02d}"
-    except (ValueError, IndexError):
-        await update.message.reply_text("Invalid time format. Use HH:MM (e.g. 08:30)")
-        return
-    if m not in (0, 30):
-        await update.message.reply_text(
-            "Times must be on the hour or half hour (e.g. 8:00, 8:30, 9:00). Pick the closest one!"
-        )
-        return
+        return ConversationHandler.END
+    if context.args:
+        formatted = _parse_time(context.args[0])
+        if not formatted:
+            await update.message.reply_text(
+                "Invalid time. Use HH:MM on the hour or half hour (e.g. 08:00, 08:30)"
+            )
+            return ConversationHandler.END
+        update_nudge_time(update.effective_user.id, formatted)
+        await update.message.reply_text(f"Morning nudge set to {formatted} ✓")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "What time should I send your morning nudge?\n\n"
+        "Send the time in HH:MM format (on the hour or half hour).\n"
+        "Examples: 08:00, 08:30, 09:00"
+    )
+    return AWAITING_NUDGE_TIME
+
+
+async def _receive_nudge_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    formatted = _parse_time(update.message.text)
+    if not formatted:
+        await update.message.reply_text(_TIME_INVALID_MSG)
+        return AWAITING_NUDGE_TIME
     update_nudge_time(update.effective_user.id, formatted)
     await update.message.reply_text(f"Morning nudge set to {formatted} ✓")
+    return ConversationHandler.END
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Cancelled.")
+    return ConversationHandler.END
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -433,10 +471,31 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+
+    reminder_conv = ConversationHandler(
+        entry_points=[CommandHandler("remindertime", remindertime)],
+        states={
+            AWAITING_REMINDER_TIME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _receive_reminder_time),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    nudge_conv = ConversationHandler(
+        entry_points=[CommandHandler("nudgetime", nudgetime)],
+        states={
+            AWAITING_NUDGE_TIME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _receive_nudge_time),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
-    app.add_handler(CommandHandler("remindertime", remindertime))
-    app.add_handler(CommandHandler("nudgetime", nudgetime))
+    app.add_handler(reminder_conv)
+    app.add_handler(nudge_conv)
     app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))
     app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_(done|archive|remind|keep|drop|back)_"))
     app.add_handler(CallbackQueryHandler(handle_rating, pattern="^(interest_|goal_)"))
