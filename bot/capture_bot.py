@@ -337,10 +337,14 @@ async def _render_nudge_list(query, context: ContextTypes.DEFAULT_TYPE, chat_id:
         except Exception:
             pass
         await context.bot.send_message(
-            chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML"
+            chat_id=chat_id, text=text, reply_markup=keyboard,
+            parse_mode="HTML", disable_web_page_preview=True,
         )
     else:
-        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="HTML")
+        await query.edit_message_text(
+            text=text, reply_markup=keyboard,
+            parse_mode="HTML", disable_web_page_preview=True,
+        )
 
 
 async def handle_nudge_list_tap(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -379,10 +383,13 @@ async def handle_nudge_list_tap(update: Update, context: ContextTypes.DEFAULT_TY
                 chat_id=chat_id,
                 text=f"{text}\n\n<i>Original screenshot no longer available.</i>",
                 reply_markup=keyboard,
-                parse_mode="HTML",
+                parse_mode="HTML", disable_web_page_preview=True,
             )
     else:
-        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="HTML")
+        await query.edit_message_text(
+            text=text, reply_markup=keyboard,
+            parse_mode="HTML", disable_web_page_preview=True,
+        )
 
 
 async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE):

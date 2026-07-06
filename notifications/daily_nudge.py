@@ -6,6 +6,8 @@ from db.queries import get_active_users, update_after_surface
 from intelligence.scoring import get_daily_items
 from notifications.nudge_session import set_session, get_session
 
+IST = timezone(timedelta(hours=5, minutes=30))
+
 
 _ACTED_MARKER = {
     "done": ("✅", "done"),
@@ -22,7 +24,7 @@ def escape_html(text) -> str:
 
 
 def _current_window_minutes() -> tuple[int, int]:
-    now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    now_ist = datetime.now(IST)
     total_minutes = now_ist.hour * 60 + now_ist.minute
     window_start_minutes = (total_minutes // 30) * 30
     window_end_minutes = window_start_minutes + 29
@@ -30,13 +32,10 @@ def _current_window_minutes() -> tuple[int, int]:
 
 
 def _list_line(number: int, item: dict) -> str:
-    has_url = bool(item.get("url"))
     title = escape_html(item["title"])
-    title_display = f"<a href='{escape_html(item['url'])}'>{title}</a>" if has_url else title
-    arrow = " ↗" if has_url else ""
     category = escape_html(item["category_name"])
     return (
-        f"{number}. {item['emoji']} {title_display}{arrow}\n"
+        f"{number}. {item['emoji']} {title}\n"
         f"   {category} · {item['age_days']:.0f}d ago"
     )
 
@@ -70,22 +69,19 @@ def build_list_view(session: dict) -> tuple[str, InlineKeyboardMarkup | None]:
 
 def _detail_body(item: dict) -> str:
     title = escape_html(item["title"])
+    meta_line = f"{escape_html(item['category_name'])} · {item['age_days']:.0f}d ago"
     content_type = item.get("content_type")
+
     if content_type == "url":
-        header_line = f"{item['emoji']} <a href='{escape_html(item['url'])}'>{title}</a>"
         content = escape_html(item.get("summary") or "")
     elif content_type == "voice":
-        header_line = f"{item['emoji']} {title}"
         content = f"🎤 Transcription:\n{escape_html(item.get('extracted_text') or '')}"
     elif content_type == "image":
-        header_line = f"{item['emoji']} {title}"
         content = escape_html((item.get("extracted_text") or "")[:500])
     else:
-        header_line = f"{item['emoji']} {title}"
         content = escape_html(item.get("raw_content") or "")
 
-    meta_line = f"{escape_html(item['category_name'])} · {item['age_days']:.0f}d ago"
-    return f"{header_line}\n{meta_line}\n\n{content}"
+    return f"{item['emoji']} {title}\n{meta_line}\n\n{content}"
 
 
 def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
@@ -105,6 +101,8 @@ def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("⏰ Later", callback_data=f"nudge_remind_{item_id}"),
             ],
         ]
+    if item.get("content_type") == "url" and item.get("url"):
+        rows.append([InlineKeyboardButton("🔗 Read article", url=item["url"])])
     rows.append([InlineKeyboardButton("← Back to list", callback_data=f"nudge_back_{item_id}")])
     return InlineKeyboardMarkup(rows)
 
@@ -126,6 +124,8 @@ async def send_daily_nudge(context):
 
     for user in users:
         user_nudge = user.get("nudge_time", "08:30")
+        if len(user_nudge) > 5:
+            user_nudge = user_nudge[:5]
         nudge_parts = user_nudge.split(":")
         nudge_h, nudge_m = int(nudge_parts[0]), int(nudge_parts[1])
         user_minutes = nudge_h * 60 + nudge_m
@@ -163,7 +163,8 @@ async def send_daily_nudge(context):
             text, keyboard = build_list_view(get_session(chat_id))
 
             await context.bot.send_message(
-                chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML"
+                chat_id=chat_id, text=text, reply_markup=keyboard,
+                parse_mode="HTML", disable_web_page_preview=True,
             )
 
             for item in items:
