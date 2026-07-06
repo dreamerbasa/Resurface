@@ -1,6 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from config import supabase
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def get_categories():
@@ -14,6 +16,8 @@ def insert_item(data: dict):
 
 
 def update_item_rating(item_id: str, field: str, value: int):
+    if field not in ("interest", "goal_alignment"):
+        raise ValueError(f"Invalid field: {field}")
     supabase.table("items").update({field: value}).eq("id", item_id).execute()
 
 
@@ -73,8 +77,10 @@ def update_nudge_time(telegram_user_id: int, time_str: str):
 
 
 def get_user_items_today(user_id: str):
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    response = supabase.table("items").select("id").eq("user_id", user_id).gte("created_at", today_start).execute()
+    now_ist = datetime.now(IST)
+    today_start_ist = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_ist.astimezone(timezone.utc).isoformat()
+    response = supabase.table("items").select("id").eq("user_id", user_id).gte("created_at", today_start_utc).execute()
     return response.data
 
 
@@ -110,13 +116,13 @@ def done_item(item_id: str):
 
 
 def remind_later(item_id: str, days: int = 3):
-    from datetime import timedelta
+
     resurface_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
     supabase.table("items").update({"resurface_after": resurface_at}).eq("id", item_id).execute()
 
 
 def keep_item(item_id: str):
-    from datetime import timedelta
+
     resurface_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
     supabase.table("items").update({
         "times_surfaced": 0,
@@ -125,7 +131,7 @@ def keep_item(item_id: str):
 
 
 def update_after_surface(item_id: str):
-    from datetime import timedelta
+
 
     response = supabase.table("items").select("times_surfaced, goal_alignment").eq("id", item_id).execute()
     if not response.data:
@@ -146,5 +152,7 @@ def update_after_surface(item_id: str):
             update_data["resurface_after"] = (now + timedelta(days=7)).isoformat()
         elif times_surfaced == 4:
             update_data["resurface_after"] = (now + timedelta(days=30)).isoformat()
+        elif times_surfaced >= 5:
+            update_data["status"] = "archived"
 
     supabase.table("items").update(update_data).eq("id", item_id).execute()
