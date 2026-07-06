@@ -167,16 +167,6 @@ def get_pending_items(user_id: str, days: int = None) -> list:
     return items
 
 
-def get_pinned_message_id(user_id: str):
-    response = supabase.table("users").select("pinned_message_id").eq("id", user_id).execute()
-    if response.data:
-        return response.data[0].get("pinned_message_id")
-    return None
-
-
-def set_pinned_message_id(user_id: str, message_id: int):
-    supabase.table("users").update({"pinned_message_id": message_id}).eq("id", user_id).execute()
-
 
 def update_after_surface(item_id: str):
 
