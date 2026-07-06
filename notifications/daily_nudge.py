@@ -112,7 +112,7 @@ def build_detail_view(item: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 
 async def send_daily_nudge(context):
-    print(f"Nudge check running at {datetime.utcnow()} UTC")
+    print(f"Nudge check running at {datetime.now(timezone.utc)} UTC")
 
     window_start_minutes, window_end_minutes = _current_window_minutes()
     window_start_h, window_start_m = divmod(window_start_minutes, 60)

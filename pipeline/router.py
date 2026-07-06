@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pipeline.extractors import text
 from pipeline.extractors import url as url_extractor
@@ -28,7 +28,7 @@ def _process_single(extracted_data: dict, user_id: str = None) -> dict:
         "summary": classification["summary"],
         "tags": classification["tags"],
         "status": "fresh",
-        "processed_at": datetime.utcnow().isoformat(),
+        "processed_at": datetime.now(timezone.utc).isoformat(),
     }
     if user_id:
         item["user_id"] = user_id

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -13,7 +13,7 @@ from notifications.daily_nudge import send_daily_nudge
 
 
 def _seconds_until_next_boundary() -> float:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if now.minute < 30:
         next_boundary = now.replace(minute=30, second=0, microsecond=0)
     else:
