@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone, timedelta
 
 from config import supabase
@@ -198,6 +199,13 @@ def get_daily_items(user_id: str) -> dict:
     }
 
 
+def _extract_url(text):
+    if not text:
+        return None
+    match = re.search(r'https?://\S+', text)
+    return match.group(0) if match else None
+
+
 def _format_item(item: dict, slot_type: str, phase: int) -> dict:
     return {
         "id": item["id"],
@@ -213,7 +221,7 @@ def _format_item(item: dict, slot_type: str, phase: int) -> dict:
         "slot_type": slot_type,
         "is_escalation": item.get("times_surfaced", 0) >= 3,
         "emoji": _get_emoji(item),
-        "url": item.get("raw_content") if item.get("content_type") == "url" else None,
+        "url": _extract_url(item.get("raw_content")) if item.get("content_type") == "url" else None,
         "content_type": item.get("content_type"),
         "raw_content": item.get("raw_content"),
         "extracted_text": item.get("extracted_text"),
