@@ -18,20 +18,11 @@ from db.queries import (
 from intelligence.scoring import _get_emoji, _extract_url, _PRIORITY_MATRIX
 from notifications.daily_nudge import build_list_view, build_detail_view, escape_html, _list_line
 from notifications.nudge_session import get_session, set_session
-from notifications.pinned_queue import update_pinned_queue
 
 
 def _is_authorized(update: Update) -> bool:
     return update.effective_user.id in AUTHORIZED_USER_IDS
 
-
-async def _update_pinned(bot, telegram_user_id: int):
-    user = get_user_by_telegram_id(telegram_user_id)
-    if user:
-        try:
-            await update_pinned_queue(bot, user)
-        except Exception as e:
-            print(f"Pinned queue update error: {e}")
 
 
 def _get_user_id(update: Update) -> str:
@@ -360,7 +351,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(result["message"])
             return
         await _send_save_response(update.message, result)
-        await _update_pinned(context.bot, update.effective_user.id)
+
     except Exception as e:
         await update.message.reply_text(f"Something went wrong: {e}")
 
@@ -384,7 +375,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
         )
         await _send_save_response(update.message, result)
-        await _update_pinned(context.bot, update.effective_user.id)
+
     except Exception as e:
         await update.message.reply_text(f"Something went wrong: {e}")
 
@@ -409,7 +400,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id,
         )
         await _send_save_response(update.message, result)
-        await _update_pinned(context.bot, update.effective_user.id)
+
     except Exception as e:
         await update.message.reply_text(f"Something went wrong: {e}")
 
@@ -572,8 +563,6 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         if "not modified" not in str(e).lower():
             print(f"Edit error: {e}")
-
-    await _update_pinned(context.bot, update.effective_user.id)
 
 
 def run_bot():
