@@ -25,7 +25,8 @@ CREATE TABLE items (
     user_id UUID REFERENCES users(id),
     times_surfaced INTEGER DEFAULT 0,
     last_surfaced_at TIMESTAMPTZ,
-    resurface_after TIMESTAMPTZ
+    resurface_after TIMESTAMPTZ,
+    remind_tonight BOOLEAN DEFAULT false
 );
 
 -- 3. Seed default categories
@@ -57,3 +58,6 @@ CREATE TABLE users (
 
 -- Migration (run if users table already exists):
 -- ALTER TABLE users ADD COLUMN pinned_message_id BIGINT;
+
+-- Migration: Add remind_tonight column
+-- ALTER TABLE items ADD COLUMN remind_tonight BOOLEAN DEFAULT false;

@@ -130,6 +130,25 @@ def keep_item(item_id: str):
     }).eq("id", item_id).execute()
 
 
+def set_remind_tonight(item_id: str, value: bool = True):
+    supabase.table("items").update({"remind_tonight": value}).eq("id", item_id).execute()
+
+
+def clear_remind_tonight(user_id: str):
+    supabase.table("items").update({"remind_tonight": False}).eq("user_id", user_id).eq("remind_tonight", True).execute()
+
+
+def get_remind_tonight_items(user_id: str) -> list:
+    response = (
+        supabase.table("items")
+        .select("id, title, content_type, raw_content")
+        .eq("user_id", user_id)
+        .eq("remind_tonight", True)
+        .execute()
+    )
+    return response.data
+
+
 def get_pending_items(user_id: str, days: int = None) -> list:
     now = datetime.now(timezone.utc)
     query = (

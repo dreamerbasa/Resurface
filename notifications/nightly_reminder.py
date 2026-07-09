@@ -1,6 +1,8 @@
 from datetime import datetime, timezone, timedelta
 
-from db.queries import get_active_users, get_user_items_today
+import re
+
+from db.queries import get_active_users, get_user_items_today, get_remind_tonight_items, clear_remind_tonight
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -42,8 +44,25 @@ async def send_nightly_reminder(context):
                 "Drop anything here before it slips away."
             )
 
+        tonight_items = get_remind_tonight_items(user["id"])
+        if tonight_items:
+            msg += "\n\n📌 <b>Remind tonight:</b>"
+            for item in tonight_items:
+                title = item.get("title") or "Untitled"
+                title = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                raw = item.get("raw_content") or ""
+                url_match = re.search(r'https?://\S+', raw)
+                if item.get("content_type") == "url" and url_match:
+                    msg += f"\n• <a href='{url_match.group()}'>{title}</a>"
+                else:
+                    msg += f"\n• {title}"
+            clear_remind_tonight(user["id"])
+
         try:
-            await context.bot.send_message(chat_id=chat_id, text=msg)
+            await context.bot.send_message(
+                chat_id=chat_id, text=msg,
+                parse_mode="HTML", disable_web_page_preview=True,
+            )
             print(f"Sent reminder to {user['display_name']}: {count} items today")
         except Exception as e:
             print(f"ERROR sending reminder to {user.get('display_name')}: {type(e).__name__}: {e}")
