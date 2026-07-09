@@ -13,7 +13,7 @@ from db.queries import (
     update_item_rating, get_item, upsert_user, get_user_by_telegram_id,
     update_last_active, set_user_active, update_reminder_time, update_nudge_time,
     archive_item, done_item, remind_later, keep_item, get_image_bytes,
-    get_pending_items,
+    get_pending_items, set_remind_tonight,
 )
 from intelligence.scoring import _get_emoji, _extract_url, _PRIORITY_MATRIX
 from notifications.daily_nudge import build_list_view, build_detail_view, escape_html, _list_line
@@ -54,6 +54,9 @@ def _rating_keyboard(item_id: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("\U0001f3af Aligned", callback_data=f"goal_3_{item_id}"),
             InlineKeyboardButton("↔️ Somewhat", callback_data=f"goal_2_{item_id}"),
             InlineKeyboardButton("❌ Nope", callback_data=f"goal_1_{item_id}"),
+        ],
+        [
+            InlineKeyboardButton("⏰ Remind tonight", callback_data=f"remind_tonight_{item_id}"),
         ],
     ])
 
@@ -450,6 +453,18 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Got {emoji} — tap the other when you're ready",
             reply_markup=_rating_keyboard(item_id),
         )
+
+
+async def handle_remind_tonight(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
+    query = update.callback_query
+    await query.answer()
+
+    item_id = query.data.replace("remind_tonight_", "")
+    set_remind_tonight(item_id)
+    await query.edit_message_text("⏰ Got it — I'll include this in tonight's reminder.")
 
 
 _EXPIRED_NUDGE_TEXT = "This nudge has expired. You'll get a fresh one next time!"
