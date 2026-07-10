@@ -283,6 +283,23 @@ def get_pending_items(user_id: str, days: int = None) -> list:
 
 
 
+def update_item_embedding(item_id: str, embedding: list[float]):
+    supabase.table("items").update({"embedding": embedding}).eq("id", item_id).execute()
+
+
+def search_by_embedding(user_id: str, query_embedding: list[float], limit: int = 10, threshold: float = 0.75) -> list:
+    response = supabase.rpc(
+        "match_items",
+        {
+            "query_embedding": query_embedding,
+            "match_threshold": threshold,
+            "match_count": limit,
+            "p_user_id": user_id,
+        },
+    ).execute()
+    return response.data
+
+
 def update_after_surface(item_id: str):
 
 

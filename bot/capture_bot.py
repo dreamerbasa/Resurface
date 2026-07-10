@@ -15,8 +15,13 @@ from db.queries import (
     archive_item, done_item, remind_later, keep_item, get_image_bytes,
     get_pending_items, set_remind_tonight,
     get_categories_with_counts, search_items, get_user_stats,
+    update_item_embedding,
 )
+import asyncio
+
 from intelligence.scoring import _get_emoji, _extract_url, _PRIORITY_MATRIX
+from intelligence.embeddings import build_embedding_text, generate_embedding
+from db.queries import update_item_embedding
 from notifications.daily_nudge import build_list_view, build_detail_view, escape_html, _list_line
 from notifications.nudge_session import get_session, set_session
 
@@ -68,6 +73,15 @@ def _truncate(text: str, limit: int = 3500) -> str:
     return text[:limit] + "... (truncated)"
 
 
+def _fire_embedding(result: dict):
+    if not isinstance(result, dict) or result.get("status") == "needs_screenshot":
+        return
+    text = build_embedding_text(result.get("title"), result.get("summary"), result.get("tags"))
+    embedding = generate_embedding(text)
+    if embedding:
+        update_item_embedding(result["item_id"], embedding)
+
+
 async def _send_save_response(message, result):
     if isinstance(result, list):
         saved = []
@@ -92,6 +106,9 @@ async def _send_save_response(message, result):
 
         for msg in skipped:
             await message.reply_text(msg)
+
+        for r in saved:
+            asyncio.get_event_loop().run_in_executor(None, _fire_embedding, r)
         return
 
     tags = ", ".join(result["tags"])
@@ -102,6 +119,7 @@ async def _send_save_response(message, result):
         "Interest level? / Goal alignment?",
         reply_markup=_rating_keyboard(result["item_id"]),
     )
+    asyncio.get_event_loop().run_in_executor(None, _fire_embedding, result)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -45,3 +45,6 @@ elif LLM_PROVIDER == "gemini":
     gemini = google.genai.Client(api_key=GEMINI_API_KEY)
 elif LLM_PROVIDER == "openai":
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+if OPENAI_API_KEY and not openai_client:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
