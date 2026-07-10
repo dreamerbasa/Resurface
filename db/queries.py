@@ -22,7 +22,7 @@ def update_item_rating(item_id: str, field: str, value: int):
 
 
 def get_item(item_id: str):
-    response = supabase.table("items").select("interest, goal_alignment").eq("id", item_id).execute()
+    response = supabase.table("items").select("interest, goal_alignment, remind_tonight").eq("id", item_id).execute()
     return response.data[0] if response.data else None
 
 
