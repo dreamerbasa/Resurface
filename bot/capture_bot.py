@@ -46,7 +46,9 @@ def _get_user_id(update: Update) -> str:
 
 
 _INTEREST_EMOJI = {3: "\U0001f525", 2: "\U0001f44d", 1: "\U0001f937"}
+_INTEREST_LABEL = {3: "\U0001f525 High", 2: "\U0001f44d Medium", 1: "\U0001f937 Low"}
 _GOAL_EMOJI = {3: "\U0001f3af", 2: "↔️", 1: "❌"}
+_GOAL_LABEL = {3: "\U0001f3af Aligned", 2: "↔️ Somewhat", 1: "❌ Nope"}
 
 
 def _rating_keyboard(item_id: str) -> InlineKeyboardMarkup:
@@ -65,6 +67,40 @@ def _rating_keyboard(item_id: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("⏰ Remind tonight", callback_data=f"remind_tonight_{item_id}"),
         ],
     ])
+
+
+def _remaining_keyboard(item_id: str, interest_rated: bool, goal_rated: bool, remind_set: bool) -> InlineKeyboardMarkup | None:
+    rows = []
+    if not interest_rated:
+        rows.append([
+            InlineKeyboardButton("\U0001f525 High", callback_data=f"interest_3_{item_id}"),
+            InlineKeyboardButton("\U0001f44d Medium", callback_data=f"interest_2_{item_id}"),
+            InlineKeyboardButton("\U0001f937 Low", callback_data=f"interest_1_{item_id}"),
+        ])
+    if not goal_rated:
+        rows.append([
+            InlineKeyboardButton("\U0001f3af Aligned", callback_data=f"goal_3_{item_id}"),
+            InlineKeyboardButton("↔️ Somewhat", callback_data=f"goal_2_{item_id}"),
+            InlineKeyboardButton("❌ Nope", callback_data=f"goal_1_{item_id}"),
+        ])
+    if not remind_set:
+        rows.append([
+            InlineKeyboardButton("⏰ Remind tonight", callback_data=f"remind_tonight_{item_id}"),
+        ])
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
+def _build_status_text(base_text: str, item: dict, interest_rated: bool, goal_rated: bool, remind_set: bool) -> str:
+    lines = [base_text]
+    if interest_rated:
+        label = _INTEREST_LABEL.get(item.get("interest"), "\U0001f44d Medium")
+        lines.append(f"Interest: {label} ✓")
+    if goal_rated:
+        label = _GOAL_LABEL.get(item.get("goal_alignment"), "❌ Nope")
+        lines.append(f"Goal: {label} ✓")
+    if remind_set:
+        lines.append("⏰ Remind tonight ✓")
+    return "\n".join(lines)
 
 
 def _truncate(text: str, limit: int = 3500) -> str:
@@ -545,27 +581,20 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     interest = item.get("interest")
     goal = item.get("goal_alignment")
-    interest_changed = interest is not None and interest != 2
-    goal_changed = goal is not None and goal != 1
+    interest_rated = interest is not None and interest != 2
+    goal_rated = goal is not None and goal != 1
+    remind_set = bool(item.get("remind_tonight"))
 
     if rating_type == "interest":
-        interest_changed = True
+        interest_rated = True
     if rating_type == "goal":
-        goal_changed = True
+        goal_rated = True
 
-    if interest_changed and goal_changed:
-        i_emoji = _INTEREST_EMOJI.get(interest, "\U0001f44d")
-        g_emoji = _GOAL_EMOJI.get(goal, "❌")
-        await query.edit_message_text(f"Rated: {i_emoji} interest, {g_emoji} goal ✓")
-    else:
-        if rating_type == "interest":
-            emoji = _INTEREST_EMOJI.get(value, "\U0001f44d")
-        else:
-            emoji = _GOAL_EMOJI.get(value, "❌")
-        await query.edit_message_text(
-            f"Got {emoji} — tap the other when you're ready",
-            reply_markup=_rating_keyboard(item_id),
-        )
+    base = query.message.text.split("\n")[0] if query.message.text else "Rate this item"
+    text = _build_status_text(base, item, interest_rated, goal_rated, remind_set)
+    keyboard = _remaining_keyboard(item_id, interest_rated, goal_rated, remind_set)
+
+    await query.edit_message_text(text, reply_markup=keyboard)
 
 
 async def handle_remind_tonight(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -577,7 +606,22 @@ async def handle_remind_tonight(update: Update, context: ContextTypes.DEFAULT_TY
 
     item_id = query.data.replace("remind_tonight_", "")
     set_remind_tonight(item_id)
-    await query.edit_message_text("⏰ Got it — I'll include this in tonight's reminder.")
+
+    item = get_item(item_id)
+    if not item:
+        await query.edit_message_text("⏰ Got it — I'll include this in tonight's reminder.")
+        return
+
+    interest = item.get("interest")
+    goal = item.get("goal_alignment")
+    interest_rated = interest is not None and interest != 2
+    goal_rated = goal is not None and goal != 1
+
+    base = query.message.text.split("\n")[0] if query.message.text else "Rate this item"
+    text = _build_status_text(base, item, interest_rated, goal_rated, remind_set=True)
+    keyboard = _remaining_keyboard(item_id, interest_rated, goal_rated, remind_set=True)
+
+    await query.edit_message_text(text, reply_markup=keyboard)
 
 
 _EXPIRED_NUDGE_TEXT = "This nudge has expired. You'll get a fresh one next time!"
