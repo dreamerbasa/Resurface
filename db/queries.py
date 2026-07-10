@@ -149,6 +149,102 @@ def get_remind_tonight_items(user_id: str) -> list:
     return response.data
 
 
+def get_categories_with_counts(user_id: str) -> list:
+    cats = get_categories()
+    response = (
+        supabase.table("items")
+        .select("category_id")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+        .execute()
+    )
+    counts = {}
+    for item in response.data:
+        cid = item.get("category_id")
+        if cid:
+            counts[cid] = counts.get(cid, 0) + 1
+    result = []
+    for cat in cats:
+        result.append({
+            "name": cat["name"],
+            "description": cat["description"],
+            "count": counts.get(cat["id"], 0),
+        })
+    result.sort(key=lambda x: -x["count"])
+    return result
+
+
+def search_items(user_id: str, keyword: str) -> list:
+    now = datetime.now(timezone.utc)
+    like_pattern = f"%{keyword}%"
+    response = (
+        supabase.table("items")
+        .select("*, categories(name)")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+        .or_(f"title.ilike.{like_pattern},summary.ilike.{like_pattern},raw_content.ilike.{like_pattern}")
+        .order("created_at", desc=True)
+        .limit(10)
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        created_at = item.get("created_at")
+        if created_at:
+            from dateutil.parser import isoparse
+            age = (now - isoparse(created_at)).total_seconds() / 86400
+        else:
+            age = 0
+        item["age_days"] = age
+        items.append(item)
+    return items
+
+
+def get_user_stats(user_id: str) -> dict:
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+
+    all_items = (
+        supabase.table("items")
+        .select("status, created_at, category_id")
+        .eq("user_id", user_id)
+        .execute()
+    ).data
+
+    total = len(all_items)
+    active = sum(1 for i in all_items if i["status"] in ("fresh", "surfaced"))
+    acted_on = sum(1 for i in all_items if i["status"] == "acted_on")
+    archived = sum(1 for i in all_items if i["status"] == "archived")
+
+    week_saved = sum(1 for i in all_items if i.get("created_at", "") >= week_ago)
+    week_acted = sum(1 for i in all_items if i["status"] == "acted_on" and i.get("created_at", "") >= week_ago)
+    week_archived = sum(1 for i in all_items if i["status"] == "archived" and i.get("created_at", "") >= week_ago)
+
+    cat_counts = {}
+    for i in all_items:
+        cid = i.get("category_id")
+        if cid:
+            cat_counts[cid] = cat_counts.get(cid, 0) + 1
+
+    cats = get_categories()
+    cat_lookup = {c["id"]: c["name"] for c in cats}
+    top_categories = sorted(cat_counts.items(), key=lambda x: -x[1])[:3]
+    top_categories = [{"name": cat_lookup.get(cid, "Unknown"), "count": cnt} for cid, cnt in top_categories]
+
+    return {
+        "total": total,
+        "active": active,
+        "acted_on": acted_on,
+        "archived": archived,
+        "week_saved": week_saved,
+        "week_acted": week_acted,
+        "week_archived": week_archived,
+        "top_categories": top_categories,
+    }
+
+
 def get_pending_items(user_id: str, days: int = None) -> list:
     now = datetime.now(timezone.utc)
     query = (
