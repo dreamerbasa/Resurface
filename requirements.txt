@@ -9,3 +9,5 @@ requests
 youtube-transcript-api
 pytz
 python-dateutil
+scikit-learn>=1.3
+numpy
