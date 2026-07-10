@@ -14,8 +14,14 @@ from db.queries import (
     update_last_active, set_user_active, update_reminder_time, update_nudge_time,
     archive_item, done_item, remind_later, keep_item, get_image_bytes,
     get_pending_items, set_remind_tonight,
+    get_categories_with_counts, search_items, get_user_stats,
+    update_item_embedding,
 )
+import asyncio
+
 from intelligence.scoring import _get_emoji, _extract_url, _PRIORITY_MATRIX
+from intelligence.embeddings import build_embedding_text, generate_embedding
+from db.queries import update_item_embedding
 from notifications.daily_nudge import build_list_view, build_detail_view, escape_html, _list_line
 from notifications.nudge_session import get_session, set_session
 
@@ -67,6 +73,15 @@ def _truncate(text: str, limit: int = 3500) -> str:
     return text[:limit] + "... (truncated)"
 
 
+def _fire_embedding(result: dict):
+    if not isinstance(result, dict) or result.get("status") == "needs_screenshot":
+        return
+    text = build_embedding_text(result.get("title"), result.get("summary"), result.get("tags"))
+    embedding = generate_embedding(text)
+    if embedding:
+        update_item_embedding(result["item_id"], embedding)
+
+
 async def _send_save_response(message, result):
     if isinstance(result, list):
         saved = []
@@ -91,6 +106,9 @@ async def _send_save_response(message, result):
 
         for msg in skipped:
             await message.reply_text(msg)
+
+        for r in saved:
+            asyncio.get_event_loop().run_in_executor(None, _fire_embedding, r)
         return
 
     tags = ", ".join(result["tags"])
@@ -101,6 +119,7 @@ async def _send_save_response(message, result):
         "Interest level? / Goal alignment?",
         reply_markup=_rating_keyboard(result["item_id"]),
     )
+    asyncio.get_event_loop().run_in_executor(None, _fire_embedding, result)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -253,6 +272,100 @@ async def _receive_nudge_time(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cancelled.")
     return ConversationHandler.END
+
+
+async def categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
+    user_id = _get_user_id(update)
+    cats = get_categories_with_counts(user_id)
+
+    total = len(cats)
+    lines = [f"📂 Your categories — {total} total", ""]
+    for cat in cats:
+        name = escape_html(cat["name"])
+        count = cat["count"]
+        lines.append(f"{name} — {count} item{'s' if count != 1 else ''}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
+    if not context.args:
+        await update.message.reply_text(
+            "What are you looking for? Send /search followed by a keyword (e.g. /search coffee)"
+        )
+        return
+
+    user_id = _get_user_id(update)
+    keyword = " ".join(context.args)
+    items = search_items(user_id, keyword)
+
+    if not items:
+        await update.message.reply_text(
+            f"No results for '{escape_html(keyword)}'. Try a different search term.",
+            parse_mode="HTML",
+        )
+        return
+
+    lines = [f"🔍 Found {len(items)} result{'s' if len(items) != 1 else ''} for '{escape_html(keyword)}'", ""]
+    for idx, item in enumerate(items, 1):
+        title = escape_html(item.get("title") or "Untitled")
+        category = escape_html(item.get("category_name") or "")
+        emoji = _get_emoji(item)
+        age = item.get("age_days", 0)
+
+        if item.get("content_type") == "url":
+            url = _extract_url(item.get("raw_content"))
+            if url:
+                title_display = f"<a href='{url}'>{title}</a>"
+            else:
+                title_display = title
+        else:
+            title_display = title
+
+        lines.append(f"{idx}. {emoji} {title_display}")
+        lines.append(f"   {category} · {age:.0f}d ago")
+
+    await update.message.reply_text(
+        _truncate("\n".join(lines)),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return
+    user_id = _get_user_id(update)
+    s = get_user_stats(user_id)
+
+    lines = [
+        "📊 Your Dropzone stats",
+        "",
+        f"Total items: {s['total']}",
+        f"├ Active: {s['active']}",
+        f"├ Acted on: {s['acted_on']}",
+        f"└ Archived: {s['archived']}",
+        "",
+        "This week:",
+        f"├ Saved: {s['week_saved']}",
+        f"├ Acted on: {s['week_acted']}",
+        f"└ Archived: {s['week_archived']}",
+    ]
+
+    if s["top_categories"]:
+        lines.append("")
+        lines.append("Top categories:")
+        for idx, cat in enumerate(s["top_categories"], 1):
+            lines.append(f"{idx}. {escape_html(cat['name'])} — {cat['count']} items")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 def _format_review_item(item: dict, now) -> dict:

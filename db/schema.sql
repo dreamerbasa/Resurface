@@ -1,3 +1,6 @@
+-- 0. Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- 1. Categories table
 CREATE TABLE categories (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -26,7 +29,8 @@ CREATE TABLE items (
     times_surfaced INTEGER DEFAULT 0,
     last_surfaced_at TIMESTAMPTZ,
     resurface_after TIMESTAMPTZ,
-    remind_tonight BOOLEAN DEFAULT false
+    remind_tonight BOOLEAN DEFAULT false,
+    embedding vector(1536)
 );
 
 -- 3. Seed default categories
@@ -61,3 +65,39 @@ CREATE TABLE users (
 
 -- Migration: Add remind_tonight column
 -- ALTER TABLE items ADD COLUMN remind_tonight BOOLEAN DEFAULT false;
+
+-- Migration: Add embedding column (requires pgvector extension)
+-- CREATE EXTENSION IF NOT EXISTS vector;
+-- ALTER TABLE items ADD COLUMN embedding vector(1536);
+
+-- 4. Similarity search function (requires pgvector)
+CREATE OR REPLACE FUNCTION match_items(
+    query_embedding vector(1536),
+    match_threshold float,
+    match_count int,
+    p_user_id uuid
+)
+RETURNS TABLE (
+    id uuid,
+    title text,
+    summary text,
+    category_name text,
+    similarity float
+)
+LANGUAGE sql STABLE
+AS $$
+    SELECT
+        items.id,
+        items.title,
+        items.summary,
+        categories.name as category_name,
+        1 - (items.embedding <=> query_embedding) as similarity
+    FROM items
+    LEFT JOIN categories ON items.category_id = categories.id
+    WHERE items.user_id = p_user_id
+    AND items.embedding IS NOT NULL
+    AND items.status IN ('fresh', 'surfaced')
+    AND 1 - (items.embedding <=> query_embedding) > match_threshold
+    ORDER BY items.embedding <=> query_embedding
+    LIMIT match_count;
+$$;
