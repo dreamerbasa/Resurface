@@ -191,14 +191,21 @@ def generate_digest_for_user(user_id: str) -> str | None:
 
 
 async def send_weekly_digest(context):
+    import traceback
+
+    logger.info(f"Weekly digest check running at {datetime.now(IST)} IST")
+
     day = _digest_day()
     if not day:
+        logger.info("Digest: Today is weekday — skipping")
         return
 
-    logger.info(f"Digest check running at {datetime.now(IST)} IST ({day.title()})")
+    logger.info(f"Digest: Today is {day.title()}")
     window_start, window_end = _current_window_minutes()
 
     users = get_active_users()
+    logger.info(f"Digest: Active users found: {len(users)}")
+
     for user in users:
         user_nudge = user.get("nudge_time", "08:30")
         if len(user_nudge) > 5:
@@ -207,13 +214,25 @@ async def send_weekly_digest(context):
         nudge_h, nudge_m = int(nudge_parts[0]), int(nudge_parts[1])
         user_minutes = nudge_h * 60 + nudge_m
 
-        if not (window_start <= user_minutes <= window_end):
+        is_match = window_start <= user_minutes <= window_end
+        logger.info(
+            f"Digest: User {user['display_name']}: nudge_time={user_nudge}, "
+            f"current_window={window_start}-{window_end}, match={is_match}"
+        )
+
+        if not is_match:
             continue
 
         try:
+            digest_type = "full" if day == "saturday" else "follow-up"
+            logger.info(f"Digest: Sending {digest_type} digest to {user['display_name']}")
+
             if day == "saturday":
                 generate_full_digest(user["id"], user["display_name"])
             else:
                 generate_followup_digest(user["id"], user["display_name"])
+
+            logger.info(f"Digest: {digest_type.title()} digest completed for {user['display_name']}")
         except Exception as e:
-            logger.error(f"ERROR generating {day} digest for {user['display_name']}: {type(e).__name__}: {e}")
+            logger.error(f"Digest ERROR for {user['display_name']}: {type(e).__name__}: {e}")
+            logger.error(traceback.format_exc())
