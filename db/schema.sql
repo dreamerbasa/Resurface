@@ -59,11 +59,15 @@ CREATE TABLE users (
     nudge_time TIME DEFAULT '08:30',
     created_at TIMESTAMPTZ DEFAULT now(),
     last_active_at TIMESTAMPTZ DEFAULT now(),
-    pinned_message_id BIGINT
+    pinned_message_id BIGINT,
+    email TEXT
 );
 
 -- Migration (run if users table already exists):
 -- ALTER TABLE users ADD COLUMN pinned_message_id BIGINT;
+
+-- Migration: Add email column to users
+-- ALTER TABLE users ADD COLUMN email TEXT;
 
 -- Migration: Add remind_tonight column
 -- ALTER TABLE items ADD COLUMN remind_tonight BOOLEAN DEFAULT false;

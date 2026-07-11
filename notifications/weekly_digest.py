@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
 
-from config import openai_client, SENDGRID_API_KEY, FROM_EMAIL, DIGEST_EMAIL
+from config import openai_client, SENDGRID_API_KEY, FROM_EMAIL
 from db.queries import (
     get_active_users, get_user_stats, get_go_deep_items,
     clear_go_deep_flags,
@@ -88,9 +88,12 @@ def _date_range_str() -> str:
     return f"{start.strftime('%B %d')} — {end.strftime('%B %d, %Y')}"
 
 
-def _send_email(html: str, subject: str, display_name: str = ""):
-    if not SENDGRID_API_KEY or not FROM_EMAIL or not DIGEST_EMAIL:
+def _send_email(html: str, subject: str, to_email: str = "", display_name: str = ""):
+    if not SENDGRID_API_KEY or not FROM_EMAIL:
         logger.info("SendGrid not configured — skipping email send")
+        return False
+    if not to_email:
+        logger.warning(f"DIGEST: No email set for {display_name}, skipping")
         return False
     try:
         import sendgrid
@@ -99,19 +102,19 @@ def _send_email(html: str, subject: str, display_name: str = ""):
         sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
         message = Mail(
             from_email=FROM_EMAIL,
-            to_emails=DIGEST_EMAIL,
+            to_emails=to_email,
             subject=subject,
             html_content=Content("text/html", html),
         )
         response = sg.send(message)
-        logger.info(f"Digest email sent to {display_name} | Status: {response.status_code}")
+        logger.info(f"Digest email sent to {display_name} ({to_email}) | Status: {response.status_code}")
         return True
     except Exception as e:
         logger.error(f"Digest email FAILED for {display_name} | Error: {type(e).__name__}: {e}")
         return False
 
 
-def generate_full_digest(user_id: str, display_name: str = "") -> str | None:
+def generate_full_digest(user_id: str, display_name: str = "", user_email: str = "") -> str | None:
     logger.info(f"Generating Saturday full digest for {display_name or user_id}")
 
     cluster_data = cluster_items(user_id)
@@ -158,7 +161,7 @@ def generate_full_digest(user_id: str, display_name: str = "") -> str | None:
     }
     html = build_digest_html(data)
 
-    _send_email(html, f"📬 Dropzone Weekly — {date_range}", display_name)
+    _send_email(html, f"📬 Dropzone Weekly — {date_range}", to_email=user_email, display_name=display_name)
 
     all_item_ids = []
     for cluster in cluster_data.get("clusters", []):
@@ -177,7 +180,7 @@ def generate_full_digest(user_id: str, display_name: str = "") -> str | None:
     return html
 
 
-def generate_followup_digest(user_id: str, display_name: str = "") -> str | None:
+def generate_followup_digest(user_id: str, display_name: str = "", user_email: str = "") -> str | None:
     logger.info(f"Generating Sunday follow-up digest for {display_name or user_id}")
 
     pending = get_digest_pending_items(user_id)
@@ -201,7 +204,7 @@ def generate_followup_digest(user_id: str, display_name: str = "") -> str | None
     }
     html = build_followup_html(data)
 
-    _send_email(html, "📬 Dropzone Follow-up — still pending", display_name)
+    _send_email(html, "📬 Dropzone Follow-up — still pending", to_email=user_email, display_name=display_name)
 
     return html
 
@@ -243,14 +246,19 @@ async def send_weekly_digest(context):
         if not is_match:
             continue
 
+        user_email = user.get("email")
+        if not user_email:
+            logger.info(f"DIGEST: Skipping {user['display_name']} — no email set")
+            continue
+
         try:
             digest_type = "full" if day == "saturday" else "follow-up"
-            logger.info(f"Digest: Sending {digest_type} digest to {user['display_name']}")
+            logger.info(f"Digest: Sending {digest_type} digest to {user['display_name']} ({user_email})")
 
             if day == "saturday":
-                generate_full_digest(user["id"], user["display_name"])
+                generate_full_digest(user["id"], user["display_name"], user_email)
             else:
-                generate_followup_digest(user["id"], user["display_name"])
+                generate_followup_digest(user["id"], user["display_name"], user_email)
 
             logger.info(f"Digest: {digest_type.title()} digest completed for {user['display_name']}")
         except Exception as e:

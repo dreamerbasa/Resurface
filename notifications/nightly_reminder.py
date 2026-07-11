@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -6,6 +7,8 @@ from db.queries import get_active_users, get_user_items_today, get_remind_tonigh
 from notifications.nudge_session import set_session, get_session
 from notifications.daily_nudge import build_list_view, escape_html
 from intelligence.scoring import _get_emoji, _extract_url
+
+logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -19,16 +22,16 @@ def _current_ist_time() -> str:
 
 
 async def send_nightly_reminder(context):
-    print(f"Reminder check running at {datetime.now(IST)} IST")
+    logger.info(f"Reminder check running at {datetime.now(IST)} IST")
     current_window = _current_ist_time()
     users = get_active_users()
-    print(f"Active users found: {len(users)}")
+    logger.info(f"Active users found: {len(users)}")
 
     for user in users:
         user_reminder = user.get("reminder_time", "22:00")
         if len(user_reminder) > 5:
             user_reminder = user_reminder[:5]
-        print(f"User {user['display_name']}: reminder_time={user_reminder}, current_window={current_window}, match={user_reminder == current_window}")
+        logger.info(f"User {user['display_name']}: reminder_time={user_reminder}, current_window={current_window}, match={user_reminder == current_window}")
         if user_reminder != current_window:
             continue
 
@@ -52,24 +55,31 @@ async def send_nightly_reminder(context):
                 chat_id=chat_id, text=msg,
                 parse_mode="HTML", disable_web_page_preview=True,
             )
-            print(f"Sent reminder to {user['display_name']}: {count} items today")
+            logger.info(f"Sent reminder to {user['display_name']}: {count} items today")
         except Exception as e:
-            print(f"ERROR sending reminder to {user.get('display_name')}: {type(e).__name__}: {e}")
+            logger.error(f"ERROR sending reminder to {user.get('display_name')}: {type(e).__name__}: {e}")
 
         tonight_items = get_remind_tonight_items(user["id"])
         if tonight_items:
             try:
                 await _send_remind_tonight(context, user, chat_id, tonight_items)
             except Exception as e:
-                print(f"ERROR sending remind-tonight to {user.get('display_name')}: {type(e).__name__}: {e}")
+                logger.error(f"ERROR sending remind-tonight to {user.get('display_name')}: {type(e).__name__}: {e}")
 
         # Sunday cleanup
         now_ist = datetime.now(IST)
-        if now_ist.weekday() == 6:
-            try:
-                await _send_sunday_cleanup(context, user, chat_id)
-            except Exception as e:
-                print(f"ERROR sending cleanup to {user.get('display_name')}: {type(e).__name__}: {e}")
+        is_sunday = now_ist.weekday() == 6
+        logger.info(f"REMINDER: Is Sunday={is_sunday} for {user['display_name']}")
+        if is_sunday:
+            candidates = get_cleanup_candidates(user["id"])
+            logger.info(f"REMINDER: Sunday cleanup — {len(candidates)} candidates found for {user['display_name']}")
+            if not candidates:
+                logger.info(f"REMINDER: No cleanup candidates for {user['display_name']} (all items are < 21 days old, or interest/goal > 2)")
+            else:
+                try:
+                    await _send_sunday_cleanup(context, user, chat_id)
+                except Exception as e:
+                    logger.error(f"ERROR sending cleanup to {user.get('display_name')}: {type(e).__name__}: {e}")
 
 
 def _format_tonight_item(item: dict) -> dict:
@@ -100,8 +110,9 @@ def _format_tonight_item(item: dict) -> dict:
 async def _send_remind_tonight(context, user: dict, chat_id: int, tonight_items: list):
     formatted = [_format_tonight_item(i) for i in tonight_items]
     header = "📌 You wanted to revisit tonight"
+    has_email = bool(user.get("email"))
 
-    set_session(chat_id, formatted, header)
+    set_session(chat_id, formatted, header, has_email=has_email)
     session = get_session(chat_id)
     text, keyboard = build_list_view(session)
 
@@ -110,7 +121,7 @@ async def _send_remind_tonight(context, user: dict, chat_id: int, tonight_items:
         parse_mode="HTML", disable_web_page_preview=True,
     )
     clear_remind_tonight(user["id"])
-    print(f"Sent remind-tonight nudge to {user['display_name']}: {len(formatted)} items")
+    logger.info(f"Sent remind-tonight nudge to {user['display_name']}: {len(formatted)} items")
 
 
 def _format_cleanup_item(item: dict) -> dict:
@@ -153,7 +164,8 @@ async def _send_sunday_cleanup(context, user: dict, chat_id: int):
 
     text = "\n".join(lines)
 
-    set_session(chat_id, formatted, header)
+    has_email = bool(user.get("email"))
+    set_session(chat_id, formatted, header, has_email=has_email)
 
     buttons = []
     for idx, item in enumerate(formatted, 1):
@@ -165,4 +177,4 @@ async def _send_sunday_cleanup(context, user: dict, chat_id: int):
         chat_id=chat_id, text=text, reply_markup=keyboard,
         parse_mode="HTML", disable_web_page_preview=True,
     )
-    print(f"Sent Sunday cleanup to {user['display_name']}: {len(display)} candidates")
+    logger.info(f"Sent Sunday cleanup to {user['display_name']}: {len(display)} candidates")

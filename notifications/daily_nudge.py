@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -5,6 +6,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from db.queries import get_active_users, update_after_surface
 from intelligence.scoring import get_daily_items
 from notifications.nudge_session import set_session, get_session
+
+logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -97,7 +100,7 @@ def _detail_body(item: dict) -> str:
     return _truncate(body)
 
 
-def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
+def _detail_keyboard(item: dict, has_email: bool = True) -> InlineKeyboardMarkup:
     item_id = item["id"]
     if item["is_escalation"]:
         rows = [
@@ -114,7 +117,7 @@ def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("⏰ Later", callback_data=f"nudge_remind_{item_id}"),
             ],
         ]
-    if not item.get("go_deep"):
+    if has_email and not item.get("go_deep"):
         rows.append([InlineKeyboardButton("🧠 Go deep", callback_data=f"nudge_godeep_{item_id}")])
     if item.get("content_type") == "url" and item.get("url"):
         rows.append([InlineKeyboardButton("🔗 Read article", url=item["url"])])
@@ -122,23 +125,22 @@ def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def build_detail_view(item: dict) -> tuple[str, InlineKeyboardMarkup]:
-    return _detail_body(item), _detail_keyboard(item)
+def build_detail_view(item: dict, has_email: bool = True) -> tuple[str, InlineKeyboardMarkup]:
+    return _detail_body(item), _detail_keyboard(item, has_email=has_email)
 
 
 async def send_daily_nudge(context):
     now_ist = datetime.now(IST)
-    if now_ist.weekday() in (5, 6):
-        print("Skipping daily nudge — weekend digest day")
-        return
+    is_weekend = now_ist.weekday() in (5, 6)
+    is_saturday = now_ist.weekday() == 5
 
-    print(f"Nudge check running at {datetime.now(timezone.utc)} UTC")
+    logger.info(f"Nudge check running at {datetime.now(timezone.utc)} UTC (weekend={is_weekend})")
 
     window_start_minutes, window_end_minutes = _current_window_minutes()
     window_start_h, window_start_m = divmod(window_start_minutes, 60)
     window_end_h, window_end_m = divmod(window_end_minutes, 60)
     users = get_active_users()
-    print(f"Active users found: {len(users)}")
+    logger.info(f"Active users found: {len(users)}")
 
     any_match = False
 
@@ -150,7 +152,7 @@ async def send_daily_nudge(context):
         nudge_h, nudge_m = int(nudge_parts[0]), int(nudge_parts[1])
         user_minutes = nudge_h * 60 + nudge_m
         is_match = window_start_minutes <= user_minutes <= window_end_minutes
-        print(
+        logger.info(
             f"User {user['display_name']}: nudge_time={user_nudge}, "
             f"current_window={window_start_h:02d}:{window_start_m:02d}-{window_end_h:02d}:{window_end_m:02d}, "
             f"match={is_match}"
@@ -158,16 +160,22 @@ async def send_daily_nudge(context):
         if not is_match:
             continue
 
+        has_email = bool(user.get("email"))
+
+        if is_weekend and has_email:
+            logger.info(f"Skipping daily nudge for {user['display_name']} — weekend + email set (digest handles it)")
+            continue
+
         any_match = True
 
-        print(f"Time matched for {user['display_name']}, fetching nudge items...")
+        logger.info(f"Time matched for {user['display_name']}, fetching nudge items...")
 
         try:
             result = get_daily_items(user["id"])
-            print(f"get_daily_items returned: {len(result.get('items', []))} items")
+            logger.info(f"get_daily_items returned: {len(result.get('items', []))} items")
             items = result.get("items", [])
             if not items:
-                print(f"No items to nudge for {user['display_name']}")
+                logger.info(f"No items to nudge for {user['display_name']}")
                 continue
 
             chat_id = user["chat_id"]
@@ -179,8 +187,11 @@ async def send_daily_nudge(context):
             else:
                 header = f"☀️ Your {len(items)} items for today"
 
-            set_session(chat_id, items, header)
+            set_session(chat_id, items, header, has_email=has_email)
             text, keyboard = build_list_view(get_session(chat_id))
+
+            if is_weekend and is_saturday and not has_email:
+                text += "\n\n💡 Set your email with /email to get a weekly digest with themed clusters and AI deep dives."
 
             await context.bot.send_message(
                 chat_id=chat_id, text=text, reply_markup=keyboard,
@@ -190,10 +201,9 @@ async def send_daily_nudge(context):
             for item in items:
                 update_after_surface(item["id"])
 
-            print(f"Sent {len(items)} nudge items to {user['display_name']}")
-            print(f"Successfully sent nudge to {user['display_name']}")
+            logger.info(f"Sent {len(items)} nudge items to {user['display_name']}")
         except Exception as e:
-            print(f"ERROR sending nudge to {user['display_name']}: {type(e).__name__}: {e}")
+            logger.error(f"ERROR sending nudge to {user['display_name']}: {type(e).__name__}: {e}")
 
     if not any_match:
-        print("No users matched current time window")
+        logger.info("No users matched current time window")
