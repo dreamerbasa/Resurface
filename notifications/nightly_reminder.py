@@ -1,7 +1,5 @@
 from datetime import datetime, timezone, timedelta
 
-import re
-
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from db.queries import get_active_users, get_user_items_today, get_remind_tonight_items, clear_remind_tonight, get_cleanup_candidates
@@ -49,20 +47,6 @@ async def send_nightly_reminder(context):
                 "Drop anything here before it slips away."
             )
 
-        tonight_items = get_remind_tonight_items(user["id"])
-        if tonight_items:
-            msg += "\n\n📌 <b>Remind tonight:</b>"
-            for item in tonight_items:
-                title = item.get("title") or "Untitled"
-                title = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                raw = item.get("raw_content") or ""
-                url_match = re.search(r'https?://\S+', raw)
-                if item.get("content_type") == "url" and url_match:
-                    msg += f"\n• <a href='{url_match.group()}'>{title}</a>"
-                else:
-                    msg += f"\n• {title}"
-            clear_remind_tonight(user["id"])
-
         try:
             await context.bot.send_message(
                 chat_id=chat_id, text=msg,
@@ -72,6 +56,13 @@ async def send_nightly_reminder(context):
         except Exception as e:
             print(f"ERROR sending reminder to {user.get('display_name')}: {type(e).__name__}: {e}")
 
+        tonight_items = get_remind_tonight_items(user["id"])
+        if tonight_items:
+            try:
+                await _send_remind_tonight(context, user, chat_id, tonight_items)
+            except Exception as e:
+                print(f"ERROR sending remind-tonight to {user.get('display_name')}: {type(e).__name__}: {e}")
+
         # Sunday cleanup
         now_ist = datetime.now(IST)
         if now_ist.weekday() == 6:
@@ -79,6 +70,46 @@ async def send_nightly_reminder(context):
                 await _send_sunday_cleanup(context, user, chat_id)
             except Exception as e:
                 print(f"ERROR sending cleanup to {user.get('display_name')}: {type(e).__name__}: {e}")
+
+
+def _format_tonight_item(item: dict) -> dict:
+    now = datetime.now(IST)
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    age_days = (now - created).total_seconds() / 86400
+    cat = item.get("category") or {}
+    return {
+        "id": item["id"],
+        "title": item.get("title") or "Untitled",
+        "category_name": cat.get("name") if isinstance(cat, dict) else cat,
+        "content_type": item.get("content_type"),
+        "raw_content": item.get("raw_content"),
+        "age_days": age_days,
+        "times_surfaced": item.get("times_surfaced", 0),
+        "interest": item.get("interest", 2),
+        "goal_alignment": item.get("goal_alignment", 1),
+        "is_escalation": False,
+        "emoji": _get_emoji(item),
+        "url": _extract_url(item.get("raw_content")) if item.get("content_type") == "url" else None,
+        "summary": item.get("summary"),
+        "extracted_text": item.get("extracted_text"),
+        "image_path": item.get("image_path"),
+    }
+
+
+async def _send_remind_tonight(context, user: dict, chat_id: int, tonight_items: list):
+    formatted = [_format_tonight_item(i) for i in tonight_items]
+    header = "📌 You wanted to revisit tonight"
+
+    set_session(chat_id, formatted, header)
+    session = get_session(chat_id)
+    text, keyboard = build_list_view(session)
+
+    await context.bot.send_message(
+        chat_id=chat_id, text=text, reply_markup=keyboard,
+        parse_mode="HTML", disable_web_page_preview=True,
+    )
+    clear_remind_tonight(user["id"])
+    print(f"Sent remind-tonight nudge to {user['display_name']}: {len(formatted)} items")
 
 
 def _format_cleanup_item(item: dict) -> dict:
