@@ -141,7 +141,7 @@ def clear_remind_tonight(user_id: str):
 def get_remind_tonight_items(user_id: str) -> list:
     response = (
         supabase.table("items")
-        .select("id, title, content_type, raw_content")
+        .select("id, title, content_type, raw_content, summary, extracted_text, image_path, interest, goal_alignment, times_surfaced, category:categories(name), created_at")
         .eq("user_id", user_id)
         .eq("remind_tonight", True)
         .execute()
