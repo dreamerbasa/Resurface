@@ -1,6 +1,9 @@
 import json
 import re
+import warnings
 from datetime import datetime, timezone
+
+warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
 
 import numpy as np
 from sklearn.cluster import HDBSCAN
