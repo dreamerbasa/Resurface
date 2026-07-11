@@ -76,6 +76,12 @@ def update_nudge_time(telegram_user_id: int, time_str: str):
     ).eq("telegram_user_id", telegram_user_id).execute()
 
 
+def update_user_email(telegram_user_id: int, email: str):
+    supabase.table("users").update(
+        {"email": email}
+    ).eq("telegram_user_id", telegram_user_id).execute()
+
+
 def get_user_items_today(user_id: str):
     now_ist = datetime.now(IST)
     today_start_ist = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)

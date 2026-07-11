@@ -1,7 +1,10 @@
 import io
+import logging
 import tempfile
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+logger = logging.getLogger(__name__)
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
     ContextTypes, ConversationHandler, filters,
@@ -15,7 +18,7 @@ from db.queries import (
     archive_item, done_item, remind_later, keep_item, get_image_bytes,
     get_pending_items, set_remind_tonight, set_go_deep,
     get_categories_with_counts, search_items, get_user_stats,
-    update_item_embedding,
+    update_item_embedding, update_user_email,
 )
 import asyncio
 
@@ -23,7 +26,7 @@ from intelligence.scoring import _get_emoji, _extract_url, _PRIORITY_MATRIX
 from intelligence.embeddings import build_embedding_text, generate_embedding
 from db.queries import update_item_embedding
 from notifications.daily_nudge import build_list_view, build_detail_view, escape_html, _list_line
-from notifications.nudge_session import get_session, set_session
+from notifications.nudge_session import get_session, set_session, REVIEW_PAGE_SIZE
 
 
 def _is_authorized(update: Update) -> bool:
@@ -178,6 +181,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/categories — view your categories\n"
             "/search [keyword] — find saved items\n"
             "/stats — your numbers\n"
+            "/email — set your email for weekly digest (unlocks themed clusters + AI deep dives)\n"
             "/nudgetime HH:MM — set morning nudge time (on the hour or half hour)\n"
             "/remindertime HH:MM — set nightly reminder time (on the hour or half hour)\n"
             "/stop — pause all nudges\n"
@@ -203,6 +207,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/categories — view your categories\n"
             "/search [keyword] — find saved items\n"
             "/stats — your numbers\n"
+            "/email — set your email for weekly digest (unlocks themed clusters + AI deep dives)\n"
             "/nudgetime HH:MM — set morning nudge time (on the hour or half hour)\n"
             "/remindertime HH:MM — set nightly reminder time (on the hour or half hour)\n"
             "/stop — pause all nudges\n"
@@ -223,7 +228,7 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-AWAITING_REMINDER_TIME, AWAITING_NUDGE_TIME = range(2)
+AWAITING_REMINDER_TIME, AWAITING_NUDGE_TIME, AWAITING_EMAIL, AWAITING_SEARCH_KEYWORD = range(4)
 
 _TIME_INVALID_MSG = "That doesn't look right. Send a time like 08:00 or 08:30"
 
@@ -305,6 +310,40 @@ async def _receive_nudge_time(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
+def _is_valid_email(text: str) -> bool:
+    return "@" in text and "." in text.split("@")[-1]
+
+
+async def email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return ConversationHandler.END
+    if context.args:
+        addr = context.args[0].strip()
+        if not _is_valid_email(addr):
+            await update.message.reply_text("That doesn't look like an email. Try again.")
+            return ConversationHandler.END
+        update_user_email(update.effective_user.id, addr)
+        await update.message.reply_text(f"Weekly digest will be sent to {addr} ✓")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "What email should I send your weekly digest to?\n"
+        "Send your email address:"
+    )
+    return AWAITING_EMAIL
+
+
+async def _receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    addr = update.message.text.strip()
+    if not _is_valid_email(addr):
+        await update.message.reply_text("That doesn't look like an email. Try again.")
+        return AWAITING_EMAIL
+    update_user_email(update.effective_user.id, addr)
+    await update.message.reply_text(f"Weekly digest will be sent to {addr} ✓")
+    return ConversationHandler.END
+
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cancelled.")
     return ConversationHandler.END
@@ -327,18 +366,11 @@ async def categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
-async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not _is_authorized(update):
-        await update.message.reply_text("Sorry, this is a private bot.")
-        return
-    if not context.args:
-        await update.message.reply_text(
-            "What are you looking for? Send /search followed by a keyword (e.g. /search coffee)"
-        )
-        return
-
+async def _run_search(update: Update, keyword: str):
     user_id = _get_user_id(update)
-    keyword = " ".join(context.args)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
     items = search_items(user_id, keyword)
 
     if not items:
@@ -348,27 +380,68 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    lines = [f"🔍 Found {len(items)} result{'s' if len(items) != 1 else ''} for '{escape_html(keyword)}'", ""]
-    for idx, item in enumerate(items, 1):
-        title = escape_html(item.get("title") or "Untitled")
-        category = escape_html(item.get("category_name") or "")
-        emoji = _get_emoji(item)
-        age = item.get("age_days", 0)
+    formatted = [_format_review_item(item, now) for item in items]
+    total = len(formatted)
+    header = f"🔍 Found {total} result{'s' if total != 1 else ''} for '{escape_html(keyword)}'"
 
-        if item.get("content_type") == "url":
-            url = _extract_url(item.get("raw_content"))
-            if url:
-                title_display = f"<a href='{url}'>{title}</a>"
-            else:
-                title_display = title
-        else:
-            title_display = title
+    cb_keyword = keyword[:20]
 
-        lines.append(f"{idx}. {emoji} {title_display}")
-        lines.append(f"   {category} · {age:.0f}d ago")
+    user_record = get_user_by_telegram_id(update.effective_user.id)
+    has_email = bool(user_record.get("email")) if user_record else False
+    set_session(update.effective_chat.id, formatted, header, has_email=has_email, review_offset=0, search_keyword=cb_keyword)
+    session = get_session(update.effective_chat.id)
+    text, keyboard = _build_review_page(session)
 
     await update.message.reply_text(
-        _truncate("\n".join(lines)),
+        _truncate(text),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.message.reply_text("Sorry, this is a private bot.")
+        return ConversationHandler.END
+    if not context.args:
+        await update.message.reply_text("What are you looking for? Type a keyword:")
+        return AWAITING_SEARCH_KEYWORD
+
+    keyword = " ".join(context.args)
+    await _run_search(update, keyword)
+    return ConversationHandler.END
+
+
+async def _receive_search_keyword(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyword = update.message.text.strip()
+    if not keyword:
+        await update.message.reply_text("Please type a keyword to search for:")
+        return AWAITING_SEARCH_KEYWORD
+    await _run_search(update, keyword)
+    return ConversationHandler.END
+
+
+async def handle_search_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = query.message.chat_id
+    session = get_session(chat_id)
+    if not session:
+        await query.edit_message_text(_EXPIRED_NUDGE_TEXT)
+        return
+
+    new_offset = int(query.data.rsplit("_", 1)[1])
+    session["review_offset"] = max(0, new_offset)
+
+    text, keyboard = _build_review_page(session)
+    await query.edit_message_text(
+        text=_truncate(text),
+        reply_markup=keyboard,
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
@@ -432,6 +505,64 @@ def _format_review_item(item: dict, now) -> dict:
     }
 
 
+def _build_review_page(session: dict) -> tuple[str, InlineKeyboardMarkup | None]:
+    order = session["order"]
+    items = session["items"]
+    acted = session["acted"]
+    offset = session.get("review_offset", 0) or 0
+    total = len(order)
+
+    page_ids = order[offset:offset + REVIEW_PAGE_SIZE]
+    if not page_ids:
+        return "Nothing pending! You're all caught up.", None
+
+    lines = [session["header"], ""]
+    number_buttons = []
+    for idx, item_id in enumerate(page_ids, start=1):
+        item = items[item_id]
+        if item_id in acted:
+            from notifications.daily_nudge import _ACTED_MARKER
+            marker, word = _ACTED_MARKER.get(acted[item_id], ("✅", "done"))
+            lines.append(f"{idx}. {marker} {escape_html(item['title'])} — {word}")
+        else:
+            lines.append(_list_line(idx, item))
+            number_buttons.append(
+                InlineKeyboardButton(f"  {idx}  ", callback_data=f"nudgelist_{item_id}")
+            )
+
+    page_num = (offset // REVIEW_PAGE_SIZE) + 1
+    total_pages = (total + REVIEW_PAGE_SIZE - 1) // REVIEW_PAGE_SIZE
+    lines.append(f"\nPage {page_num}/{total_pages} · {total} items total")
+
+    text = "\n".join(lines)
+
+    rows = []
+    if number_buttons:
+        row1 = number_buttons[:3]
+        row2 = number_buttons[3:]
+        rows.append(row1)
+        if row2:
+            rows.append(row2)
+
+    nav_row = []
+    keyword = session.get("search_keyword")
+    if keyword:
+        prev_cb = f"search_prev_{keyword}_{offset - REVIEW_PAGE_SIZE}"
+        more_cb = f"search_more_{keyword}_{offset + REVIEW_PAGE_SIZE}"
+    else:
+        prev_cb = f"review_prev_{offset - REVIEW_PAGE_SIZE}"
+        more_cb = f"review_more_{offset + REVIEW_PAGE_SIZE}"
+    if offset > 0:
+        nav_row.append(InlineKeyboardButton("← Previous", callback_data=prev_cb))
+    if offset + REVIEW_PAGE_SIZE < total:
+        nav_row.append(InlineKeyboardButton("Show more →", callback_data=more_cb))
+    if nav_row:
+        rows.append(nav_row)
+
+    keyboard = InlineKeyboardMarkup(rows) if rows else None
+    return text, keyboard
+
+
 async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         await update.message.reply_text("Sorry, this is a private bot.")
@@ -456,37 +587,44 @@ async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     formatted = [_format_review_item(item, now) for item in raw_items]
     formatted.sort(key=lambda x: (-int(x["times_surfaced"] == 0), -x["_weight"]))
 
-    total = len(formatted)
-    display_items = formatted[:10]
-
     if days:
-        header = f"📋 Items from the last {days} days — {total} pending"
+        header = f"📋 Items from the last {days} days — {len(formatted)} pending"
     else:
-        header = f"📋 Your review queue — {total} item{'s' if total != 1 else ''} pending"
+        header = f"📋 Your review queue — {len(formatted)} item{'s' if len(formatted) != 1 else ''} pending"
 
-    set_session(update.effective_chat.id, display_items, header)
+    user_record = get_user_by_telegram_id(update.effective_user.id)
+    has_email = bool(user_record.get("email")) if user_record else False
+    set_session(update.effective_chat.id, formatted, header, has_email=has_email, review_offset=0)
     session = get_session(update.effective_chat.id)
-    text, _ = build_list_view(session)
-
-    if total > 10:
-        text += f"\n\nShowing 10 of {total}. Use /review 7 to filter by recent days."
-
-    button_items = display_items[:5]
-    row1 = []
-    row2 = []
-    for idx, item in enumerate(button_items, start=1):
-        btn = InlineKeyboardButton(f"  {idx}  ", callback_data=f"nudgelist_{item['id']}")
-        if idx <= 3:
-            row1.append(btn)
-        else:
-            row2.append(btn)
-    rows = [row1]
-    if row2:
-        rows.append(row2)
-    keyboard = InlineKeyboardMarkup(rows)
+    text, keyboard = _build_review_page(session)
 
     await update.message.reply_text(
         _truncate(text),
+        reply_markup=keyboard,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+
+async def handle_review_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = query.message.chat_id
+    session = get_session(chat_id)
+    if not session:
+        await query.edit_message_text(_EXPIRED_NUDGE_TEXT)
+        return
+
+    new_offset = int(query.data.split("_")[-1])
+    session["review_offset"] = max(0, new_offset)
+
+    text, keyboard = _build_review_page(session)
+    await query.edit_message_text(
+        text=_truncate(text),
         reply_markup=keyboard,
         parse_mode="HTML",
         disable_web_page_preview=True,
@@ -640,6 +778,8 @@ async def _render_nudge_list(query, context: ContextTypes.DEFAULT_TYPE, chat_id:
     session = get_session(chat_id)
     if not session:
         text, keyboard = _EXPIRED_NUDGE_TEXT, None
+    elif session.get("review_offset") is not None:
+        text, keyboard = _build_review_page(session)
     else:
         text, keyboard = build_list_view(session)
 
@@ -674,7 +814,8 @@ async def handle_nudge_list_tap(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     item = session["items"][item_id]
-    text, keyboard = build_detail_view(item)
+    has_email = session.get("has_email", True)
+    text, keyboard = build_detail_view(item, has_email=has_email)
 
     if item.get("content_type") == "image":
         image_bytes = get_image_bytes(item["image_path"]) if item.get("image_path") else None
@@ -735,7 +876,7 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _render_nudge_list(query, context, chat_id)
     except Exception as e:
         if "not modified" not in str(e).lower():
-            print(f"Edit error: {e}")
+            logger.error(f"Edit error: {e}")
 
 
 async def handle_go_deep(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -752,12 +893,17 @@ async def handle_go_deep(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(_EXPIRED_NUDGE_TEXT)
         return
 
+    has_email = session.get("has_email", True)
+    if not has_email:
+        await query.answer("Deep dives are sent in your weekly digest. Set your email first with /email", show_alert=True)
+        return
+
     set_go_deep(item_id)
 
     item = session["items"][item_id]
     item["go_deep"] = True
 
-    text, keyboard = build_detail_view(item)
+    text, keyboard = build_detail_view(item, has_email=has_email)
 
     await query.edit_message_text(
         text=text, reply_markup=keyboard,
@@ -799,5 +945,5 @@ def run_bot():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    print("Bot is running...")
+    logger.info("Bot is running...")
     app.run_polling()

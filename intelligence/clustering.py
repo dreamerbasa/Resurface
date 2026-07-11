@@ -1,9 +1,12 @@
 import json
+import logging
 import re
 import warnings
 from datetime import datetime, timezone
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn")
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 from sklearn.cluster import HDBSCAN
@@ -79,7 +82,7 @@ def _generate_theme(items: list[dict]) -> dict:
                 "theme": parsed.get("theme", "Related items"),
             }
     except Exception as e:
-        print(f"Theme naming failed: {type(e).__name__}: {e}")
+        logger.error(f"Theme naming failed: {type(e).__name__}: {e}")
 
     return {"emoji": "📌", "theme": "Related items"}
 
