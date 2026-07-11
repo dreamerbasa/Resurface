@@ -30,6 +30,8 @@ CREATE TABLE items (
     last_surfaced_at TIMESTAMPTZ,
     resurface_after TIMESTAMPTZ,
     remind_tonight BOOLEAN DEFAULT false,
+    go_deep BOOLEAN DEFAULT false,
+    included_in_digest_at TIMESTAMPTZ,
     embedding vector(1536)
 );
 
@@ -65,6 +67,12 @@ CREATE TABLE users (
 
 -- Migration: Add remind_tonight column
 -- ALTER TABLE items ADD COLUMN remind_tonight BOOLEAN DEFAULT false;
+
+-- Migration: Add go_deep column
+-- ALTER TABLE items ADD COLUMN go_deep BOOLEAN DEFAULT false;
+
+-- Migration: Add included_in_digest_at column
+-- ALTER TABLE items ADD COLUMN included_in_digest_at TIMESTAMPTZ;
 
 -- Migration: Add embedding column (requires pgvector extension)
 -- CREATE EXTENSION IF NOT EXISTS vector;

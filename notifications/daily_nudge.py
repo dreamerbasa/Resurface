@@ -123,6 +123,11 @@ def build_detail_view(item: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 
 async def send_daily_nudge(context):
+    now_ist = datetime.now(IST)
+    if now_ist.weekday() in (5, 6):
+        print("Skipping daily nudge — weekend digest day")
+        return
+
     print(f"Nudge check running at {datetime.now(timezone.utc)} UTC")
 
     window_start_minutes, window_end_minutes = _current_window_minutes()

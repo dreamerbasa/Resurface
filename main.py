@@ -16,6 +16,7 @@ from bot.capture_bot import (
 )
 from notifications.nightly_reminder import send_nightly_reminder
 from notifications.daily_nudge import send_daily_nudge
+from notifications.weekly_digest import send_weekly_digest
 
 
 def _seconds_until_next_boundary() -> float:
@@ -78,6 +79,12 @@ def main():
 
     app.job_queue.run_repeating(
         send_daily_nudge,
+        interval=1800,
+        first=delay,
+    )
+
+    app.job_queue.run_repeating(
+        send_weekly_digest,
         interval=1800,
         first=delay,
     )
