@@ -33,24 +33,44 @@ def _digest_day() -> str | None:
     return None
 
 
-def _generate_deep_dive(extracted_text: str, title: str = "") -> str:
+def _generate_deep_dive(extracted_text: str, title: str = "", category_name: str = "") -> str:
     if not openai_client or not extracted_text:
         return ""
     try:
+        user_prompt = (
+            f"Category: {category_name}\n"
+            f"Title: {title}\n"
+            f"Content: {extracted_text[:8000]}\n\n"
+            "Based on the category, provide the most useful deep dive:\n\n"
+            "If article/book: Summarize the key arguments in detail. "
+            "What's the core thesis? What evidence or examples does it use? "
+            "What are potential counterpoints? What should the reader take away?\n\n"
+            "If job posting: What skills and experience does this need? "
+            "What kind of person are they looking for? What should someone prep to apply? "
+            "What questions should they ask in the interview?\n\n"
+            "If business idea: What's the market opportunity? Who's already doing something similar? "
+            "What are the biggest risks? What would a first step look like?\n\n"
+            "If recipe: Break down the technique. What are the tricky parts? "
+            "What substitutions work? Any tips for someone making this the first time?\n\n"
+            "If poem/creative writing: What themes are at play? What similar works explore this? "
+            "How could this be expanded or developed further?\n\n"
+            "If random thought/other: Expand on this idea. What are the implications? "
+            "What related concepts connect to it? What would exploring this further look like?\n\n"
+            "Keep it under 300 words. Be specific, not generic."
+        )
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "Based on this article, create a structured learning roadmap. Include:\n"
-                        "1. **Key concepts** (3-5 bullet points)\n"
-                        "2. **Learning path** from scratch (numbered steps)\n"
-                        "3. **Related topics** worth exploring (3-5 items)\n"
-                        "Be specific and actionable. Not generic."
+                        "You are an expert analyst. Based on the content and its category, "
+                        "provide a deep dive that's genuinely useful. Adapt your response format "
+                        "to what makes sense for this type of content. Write in clear, direct prose. "
+                        "No markdown, no asterisks, no backticks."
                     ),
                 },
-                {"role": "user", "content": extracted_text[:8000]},
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.4,
         )
@@ -111,7 +131,7 @@ def generate_full_digest(user_id: str, display_name: str = "") -> str | None:
     go_deep_ids = []
     for item in go_deep_items:
         title = item.get("title", "Untitled")
-        content = _generate_deep_dive(item.get("extracted_text") or item.get("summary") or "", title)
+        content = _generate_deep_dive(item.get("extracted_text") or item.get("summary") or "", title, item.get("category_name", ""))
         url = _extract_url(item.get("raw_content")) if item.get("content_type") == "url" else None
         deep_dives.append({
             "title": title,

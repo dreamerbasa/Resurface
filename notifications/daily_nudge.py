@@ -92,6 +92,8 @@ def _detail_body(item: dict) -> str:
         content = escape_html(item.get("raw_content") or "")
 
     body = f"{item['emoji']} {title}\n{meta_line}\n\n{content}"
+    if item.get("go_deep"):
+        body += "\n\n🧠 Deep dive requested ✓"
     return _truncate(body)
 
 
@@ -112,6 +114,8 @@ def _detail_keyboard(item: dict) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("⏰ Later", callback_data=f"nudge_remind_{item_id}"),
             ],
         ]
+    if not item.get("go_deep"):
+        rows.append([InlineKeyboardButton("🧠 Go deep", callback_data=f"nudge_godeep_{item_id}")])
     if item.get("content_type") == "url" and item.get("url"):
         rows.append([InlineKeyboardButton("🔗 Read article", url=item["url"])])
     rows.append([InlineKeyboardButton("← Back to list", callback_data=f"nudge_back_{item_id}")])

@@ -80,17 +80,20 @@ def build_digest_html(data: dict) -> str:
         dive_cards = ""
         for dive in deep_dives:
             title = _esc(dive.get("title", "Untitled"))
+            cat = _esc(dive.get("category_name", ""))
             content = dive.get("deep_dive_content", "")
-            content_html = _format_deep_dive(content)
             url = dive.get("url")
-            link_html = ""
             if url:
-                link_html = f'<div style="margin-top: 12px;"><a href="{_esc(url)}" style="color: #2563eb; text-decoration: none; font-weight: 500;">Read original →</a></div>'
+                title_display = f'<a href="{_esc(url)}" style="color: #2563eb; text-decoration: none; font-weight: 600;">{title}</a>'
+            else:
+                title_display = f'<span style="font-weight: 600;">{title}</span>'
+            cat_html = f'<div style="font-size: 12px; color: #9ca3af; margin-bottom: 8px;">{cat}</div>' if cat else ""
+            content_html = _esc(content).replace("\n", "<br>")
             dive_cards += f"""
             <div style="background: #fffbeb; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #fde68a;">
-                <div style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 10px;">{title}</div>
+                <div style="font-size: 16px; color: #1f2937; margin-bottom: 4px;">{title_display}</div>
+                {cat_html}
                 <div style="font-size: 14px; color: #374151; line-height: 1.6;">{content_html}</div>
-                {link_html}
             </div>
             """
         sections.append(f"""

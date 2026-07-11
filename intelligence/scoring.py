@@ -226,6 +226,7 @@ def _format_item(item: dict, slot_type: str, phase: int) -> dict:
         "raw_content": item.get("raw_content"),
         "extracted_text": item.get("extracted_text"),
         "image_path": item.get("image_path"),
+        "go_deep": item.get("go_deep", False),
     }
 
 

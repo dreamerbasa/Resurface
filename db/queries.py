@@ -22,7 +22,7 @@ def update_item_rating(item_id: str, field: str, value: int):
 
 
 def get_item(item_id: str):
-    response = supabase.table("items").select("interest, goal_alignment, remind_tonight").eq("id", item_id).execute()
+    response = supabase.table("items").select("interest, goal_alignment, remind_tonight, go_deep").eq("id", item_id).execute()
     return response.data[0] if response.data else None
 
 
@@ -141,7 +141,7 @@ def clear_remind_tonight(user_id: str):
 def get_remind_tonight_items(user_id: str) -> list:
     response = (
         supabase.table("items")
-        .select("id, title, content_type, raw_content, summary, extracted_text, image_path, interest, goal_alignment, times_surfaced, category:categories(name), created_at")
+        .select("id, title, content_type, raw_content, summary, extracted_text, image_path, interest, goal_alignment, times_surfaced, go_deep, category:categories(name), created_at")
         .eq("user_id", user_id)
         .eq("remind_tonight", True)
         .execute()
@@ -405,6 +405,10 @@ def get_never_surfaced(user_id: str, limit: int = 1) -> list:
         items.append(item)
     items.sort(key=_matrix_weight, reverse=True)
     return items[:limit]
+
+
+def set_go_deep(item_id: str, value: bool = True):
+    supabase.table("items").update({"go_deep": value}).eq("id", item_id).execute()
 
 
 def clear_go_deep_flags(item_ids: list):
