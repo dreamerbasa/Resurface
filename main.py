@@ -13,6 +13,7 @@ from bot.capture_bot import (
     AWAITING_REMINDER_TIME, AWAITING_NUDGE_TIME,
     handle_text, handle_voice, handle_photo, handle_rating,
     handle_nudge_action, handle_nudge_list_tap, handle_remind_tonight,
+    handle_go_deep,
 )
 from notifications.nightly_reminder import send_nightly_reminder
 from notifications.daily_nudge import send_daily_nudge
@@ -62,6 +63,7 @@ def main():
     app.add_handler(reminder_conv)
     app.add_handler(nudge_conv)
     app.add_handler(CallbackQueryHandler(handle_nudge_list_tap, pattern="^nudgelist_"))
+    app.add_handler(CallbackQueryHandler(handle_go_deep, pattern="^nudge_godeep_"))
     app.add_handler(CallbackQueryHandler(handle_nudge_action, pattern="^nudge_(done|archive|remind|keep|drop|back)_"))
     app.add_handler(CallbackQueryHandler(handle_remind_tonight, pattern="^remind_tonight_"))
     app.add_handler(CallbackQueryHandler(handle_rating, pattern="^(interest_|goal_)"))

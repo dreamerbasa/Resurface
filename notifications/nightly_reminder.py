@@ -93,6 +93,7 @@ def _format_tonight_item(item: dict) -> dict:
         "summary": item.get("summary"),
         "extracted_text": item.get("extracted_text"),
         "image_path": item.get("image_path"),
+        "go_deep": item.get("go_deep", False),
     }
 
 
@@ -129,6 +130,7 @@ def _format_cleanup_item(item: dict) -> dict:
         "summary": item.get("summary"),
         "extracted_text": item.get("extracted_text"),
         "image_path": item.get("image_path"),
+        "go_deep": item.get("go_deep", False),
     }
 
 

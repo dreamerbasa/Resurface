@@ -13,7 +13,7 @@ from db.queries import (
     update_item_rating, get_item, upsert_user, get_user_by_telegram_id,
     update_last_active, set_user_active, update_reminder_time, update_nudge_time,
     archive_item, done_item, remind_later, keep_item, get_image_bytes,
-    get_pending_items, set_remind_tonight,
+    get_pending_items, set_remind_tonight, set_go_deep,
     get_categories_with_counts, search_items, get_user_stats,
     update_item_embedding,
 )
@@ -427,6 +427,7 @@ def _format_review_item(item: dict, now) -> dict:
         "raw_content": item.get("raw_content"),
         "extracted_text": item.get("extracted_text"),
         "image_path": item.get("image_path"),
+        "go_deep": item.get("go_deep", False),
         "_weight": _PRIORITY_MATRIX.get((interest, goal), 1),
     }
 
@@ -735,6 +736,33 @@ async def handle_nudge_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         if "not modified" not in str(e).lower():
             print(f"Edit error: {e}")
+
+
+async def handle_go_deep(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await update.callback_query.answer("Not authorized.")
+        return
+    query = update.callback_query
+    await query.answer()
+
+    item_id = query.data.replace("nudge_godeep_", "")
+    chat_id = query.message.chat_id
+    session = get_session(chat_id)
+    if not session or item_id not in session["items"]:
+        await query.edit_message_text(_EXPIRED_NUDGE_TEXT)
+        return
+
+    set_go_deep(item_id)
+
+    item = session["items"][item_id]
+    item["go_deep"] = True
+
+    text, keyboard = build_detail_view(item)
+
+    await query.edit_message_text(
+        text=text, reply_markup=keyboard,
+        parse_mode="HTML", disable_web_page_preview=True,
+    )
 
 
 def run_bot():
