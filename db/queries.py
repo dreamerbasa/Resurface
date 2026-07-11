@@ -283,6 +283,170 @@ def get_pending_items(user_id: str, days: int = None) -> list:
 
 
 
+def mark_items_in_digest(item_ids: list):
+    now = datetime.now(timezone.utc).isoformat()
+    for item_id in item_ids:
+        supabase.table("items").update({"included_in_digest_at": now}).eq("id", item_id).execute()
+
+
+def get_digest_pending_items(user_id: str) -> list:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+    response = (
+        supabase.table("items")
+        .select("id, title, summary, content_type, raw_content, interest, goal_alignment, times_surfaced, created_at, categories(name)")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+        .gte("included_in_digest_at", cutoff)
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        items.append(item)
+    return items
+
+
+def get_items_saved_since(user_id: str, since_hours: int = 24) -> list:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=since_hours)).isoformat()
+    response = (
+        supabase.table("items")
+        .select("id, title, summary, content_type, raw_content, categories(name)")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+        .gte("created_at", cutoff)
+        .is_("included_in_digest_at", "null")
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        items.append(item)
+    return items
+
+
+def get_cleanup_candidates(user_id: str) -> list:
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=21)).isoformat()
+    response = (
+        supabase.table("items")
+        .select("id, title, content_type, raw_content, interest, goal_alignment, times_surfaced, created_at, categories(name)")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+        .lte("interest", 2)
+        .lte("goal_alignment", 2)
+        .lt("created_at", cutoff)
+        .execute()
+    )
+    now = datetime.now(timezone.utc)
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        from dateutil.parser import isoparse
+        created_at = isoparse(item["created_at"]) if item.get("created_at") else now
+        item["age_days"] = round((now - created_at).total_seconds() / 86400, 1)
+        items.append(item)
+    return items
+
+
+_PRIORITY_MATRIX = {
+    (3, 3): 9, (3, 2): 7, (3, 1): 5,
+    (2, 3): 6, (2, 2): 4, (2, 1): 2,
+    (1, 3): 3, (1, 2): 1, (1, 1): 1,
+}
+
+
+def _matrix_weight(item: dict) -> int:
+    return _PRIORITY_MATRIX.get((item.get("interest", 2), item.get("goal_alignment", 1)), 1)
+
+
+def get_skipped_this_week(user_id: str, limit: int = 3) -> list:
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    now = datetime.now(timezone.utc)
+    response = (
+        supabase.table("items")
+        .select("id, title, summary, content_type, raw_content, interest, goal_alignment, times_surfaced, created_at, categories(name)")
+        .eq("user_id", user_id)
+        .in_("status", ["fresh", "surfaced"])
+        .gte("times_surfaced", 1)
+        .gte("last_surfaced_at", week_ago)
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        from dateutil.parser import isoparse
+        created_at = isoparse(item["created_at"]) if item.get("created_at") else now
+        item["age_days"] = round((now - created_at).total_seconds() / 86400, 1)
+        items.append(item)
+    items.sort(key=_matrix_weight, reverse=True)
+    return items[:limit]
+
+
+def get_never_surfaced(user_id: str, limit: int = 1) -> list:
+    now = datetime.now(timezone.utc)
+    response = (
+        supabase.table("items")
+        .select("id, title, summary, content_type, raw_content, interest, goal_alignment, times_surfaced, created_at, categories(name)")
+        .eq("user_id", user_id)
+        .eq("status", "fresh")
+        .eq("times_surfaced", 0)
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        from dateutil.parser import isoparse
+        created_at = isoparse(item["created_at"]) if item.get("created_at") else now
+        item["age_days"] = round((now - created_at).total_seconds() / 86400, 1)
+        items.append(item)
+    items.sort(key=_matrix_weight, reverse=True)
+    return items[:limit]
+
+
+def clear_go_deep_flags(item_ids: list):
+    for item_id in item_ids:
+        supabase.table("items").update({"go_deep": False}).eq("id", item_id).execute()
+
+
+def get_go_deep_items(user_id: str) -> list:
+    response = (
+        supabase.table("items")
+        .select("id, title, summary, extracted_text, content_type, raw_content, categories(name)")
+        .eq("user_id", user_id)
+        .eq("go_deep", True)
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        items.append(item)
+    return items
+
+
+def get_unread_articles(user_id: str, limit: int = 5) -> list:
+    response = (
+        supabase.table("items")
+        .select("id, title, summary, extracted_text, content_type, raw_content, categories(name)")
+        .eq("user_id", user_id)
+        .eq("content_type", "url")
+        .eq("times_surfaced", 0)
+        .in_("status", ["fresh", "surfaced"])
+        .limit(limit)
+        .execute()
+    )
+    items = []
+    for item in response.data:
+        cat = item.pop("categories", None)
+        item["category_name"] = cat["name"] if cat else None
+        items.append(item)
+    return items
+
+
 def update_item_embedding(item_id: str, embedding: list[float]):
     supabase.table("items").update({"embedding": embedding}).eq("id", item_id).execute()
 

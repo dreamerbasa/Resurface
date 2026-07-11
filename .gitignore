@@ -219,3 +219,4 @@ __marimo__/
 
 # Test scripts
 tests/
+test_digest_output.html
