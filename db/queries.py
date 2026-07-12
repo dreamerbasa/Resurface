@@ -425,7 +425,7 @@ def clear_go_deep_flags(item_ids: list):
 def get_go_deep_items(user_id: str) -> list:
     response = (
         supabase.table("items")
-        .select("id, title, summary, extracted_text, content_type, raw_content, categories(name)")
+        .select("id, title, summary, extracted_text, content_type, raw_content, status, categories(name)")
         .eq("user_id", user_id)
         .eq("go_deep", True)
         .execute()
