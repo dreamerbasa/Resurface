@@ -141,6 +141,7 @@ def generate_full_digest(user_id: str, display_name: str = "", user_email: str =
             "deep_dive_content": content,
             "url": url,
             "category_name": item.get("category_name"),
+            "status": item.get("status"),
         })
         go_deep_ids.append(item["id"])
 

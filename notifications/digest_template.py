@@ -83,15 +83,22 @@ def build_digest_html(data: dict) -> str:
             cat = _esc(dive.get("category_name", ""))
             content = dive.get("deep_dive_content", "")
             url = dive.get("url")
+            status = dive.get("status")
             if url:
                 title_display = f'<a href="{_esc(url)}" style="color: #2563eb; text-decoration: none; font-weight: 600;">{title}</a>'
             else:
                 title_display = f'<span style="font-weight: 600;">{title}</span>'
+            status_note = ""
+            if status == "acted_on":
+                status_note = '<div style="font-size: 12px; color: #059669; margin-bottom: 6px;">✅ You acted on this — here\'s the deep dive you requested</div>'
+            elif status == "archived":
+                status_note = '<div style="font-size: 12px; color: #6b7280; margin-bottom: 6px;">📦 Archived — deep dive still generated as requested</div>'
             cat_html = f'<div style="font-size: 12px; color: #9ca3af; margin-bottom: 8px;">{cat}</div>' if cat else ""
             content_html = _esc(content).replace("\n", "<br>")
             dive_cards += f"""
             <div style="background: #fffbeb; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #fde68a;">
                 <div style="font-size: 16px; color: #1f2937; margin-bottom: 4px;">{title_display}</div>
+                {status_note}
                 {cat_html}
                 <div style="font-size: 14px; color: #374151; line-height: 1.6;">{content_html}</div>
             </div>
