@@ -175,7 +175,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user.get("is_active"):
             set_user_active(update.effective_user.id, True)
         await update.message.reply_text(
-            "Welcome back to Dropzone! \U0001f4e6 Nudges resumed.\n\n"
+            "Welcome back to Cue! \U0001f4e6 Nudges resumed.\n\n"
             "<b>Commands:</b>\n"
             "/review — see your pending items\n"
             "/categories — view your categories\n"
@@ -190,7 +190,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text(
-            "Welcome to Dropzone! \U0001f4e6\n\n"
+            "Welcome to Cue! \U0001f4e6\n\n"
             "Your second brain. Dump everything, forget nothing.\n\n"
             "Send me anything — screenshots, links, voice notes, ideas — "
             "and I'll organize it, remember it, and remind you when it matters.\n\n"
@@ -455,7 +455,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s = get_user_stats(user_id)
 
     lines = [
-        "📊 Your Dropzone stats",
+        "📊 Your Cue stats",
         "",
         f"Total items: {s['total']}",
         f"├ Active: {s['active']}",
