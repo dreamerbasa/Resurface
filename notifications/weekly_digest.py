@@ -162,7 +162,7 @@ def generate_full_digest(user_id: str, display_name: str = "", user_email: str =
     }
     html = build_digest_html(data)
 
-    _send_email(html, f"📬 Dropzone Weekly — {date_range}", to_email=user_email, display_name=display_name)
+    _send_email(html, f"📬 Cue Weekly — {date_range}", to_email=user_email, display_name=display_name)
 
     all_item_ids = []
     for cluster in cluster_data.get("clusters", []):
@@ -205,7 +205,7 @@ def generate_followup_digest(user_id: str, display_name: str = "", user_email: s
     }
     html = build_followup_html(data)
 
-    _send_email(html, "📬 Dropzone Follow-up — still pending", to_email=user_email, display_name=display_name)
+    _send_email(html, "📬 Cue Follow-up — still pending", to_email=user_email, display_name=display_name)
 
     return html
 

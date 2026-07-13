@@ -1,4 +1,4 @@
-# Dropzone
+# Cue
 
 AI-powered personal knowledge aggregator that captures scattered saves from Instagram, LinkedIn, Substack, and voice notes — auto-classifies them and resurfaces what matters.
 

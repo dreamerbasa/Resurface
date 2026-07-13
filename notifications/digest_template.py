@@ -44,7 +44,7 @@ def build_digest_html(data: dict) -> str:
     # --- HEADER ---
     sections.append(f"""
     <div style="background: #2563eb; padding: 32px 24px; border-radius: 12px 12px 0 0; text-align: center;">
-        <div style="font-size: 28px; font-weight: 700; color: #ffffff;">📬 Dropzone Weekly</div>
+        <div style="font-size: 28px; font-weight: 700; color: #ffffff;">📬 Cue Weekly</div>
         <div style="font-size: 14px; color: #bfdbfe; margin-top: 8px;">{_esc(date_range)}</div>
     </div>
     """)
@@ -150,8 +150,8 @@ def build_digest_html(data: dict) -> str:
     sections.append("""
     <div style="padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
         <div style="font-size: 13px; color: #6b7280; line-height: 1.6;">
-            Open Dropzone in Telegram to act on these.
-            <br>You received this because you use Dropzone. Send /stop to pause.
+            Open Cue in Telegram to act on these.
+            <br>You received this because you use Cue. Send /stop to pause.
         </div>
     </div>
     """)
@@ -163,7 +163,7 @@ def build_digest_html(data: dict) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dropzone Weekly</title>
+<title>Cue Weekly</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
 <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; margin-top: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -183,7 +183,7 @@ def build_followup_html(data: dict) -> str:
     # --- HEADER ---
     sections.append("""
     <div style="background: #7c3aed; padding: 32px 24px; border-radius: 12px 12px 0 0; text-align: center;">
-        <div style="font-size: 28px; font-weight: 700; color: #ffffff;">📬 Dropzone Follow-up</div>
+        <div style="font-size: 28px; font-weight: 700; color: #ffffff;">📬 Cue Follow-up</div>
         <div style="font-size: 14px; color: #ddd6fe; margin-top: 8px;">Quick follow-up — these are still waiting</div>
     </div>
     """)
@@ -252,8 +252,8 @@ def build_followup_html(data: dict) -> str:
     sections.append("""
     <div style="padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
         <div style="font-size: 13px; color: #6b7280; line-height: 1.6;">
-            Open Dropzone in Telegram to act on these.
-            <br>You received this because you use Dropzone. Send /stop to pause.
+            Open Cue in Telegram to act on these.
+            <br>You received this because you use Cue. Send /stop to pause.
         </div>
     </div>
     """)
@@ -265,7 +265,7 @@ def build_followup_html(data: dict) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dropzone Follow-up</title>
+<title>Cue Follow-up</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
 <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; margin-top: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
