@@ -219,4 +219,5 @@ __marimo__/
 
 # Test scripts
 tests/
+demo_videos/
 test_digest_output.html
