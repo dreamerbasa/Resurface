@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
 
-from config import openai_client, SENDGRID_API_KEY, FROM_EMAIL
+from config import openai_client, SENDGRID_API_KEY, FROM_EMAIL, supabase
 from db.queries import (
     get_active_users, get_user_stats, get_go_deep_items,
     clear_go_deep_flags,
@@ -9,8 +9,8 @@ from db.queries import (
     get_skipped_this_week, get_never_surfaced,
 )
 from intelligence.clustering import cluster_items
-from intelligence.scoring import _extract_url
-from notifications.digest_template import build_digest_html, build_followup_html
+from intelligence.scoring import _extract_url, _PRIORITY_MATRIX
+from notifications.digest_template import build_digest_html, build_followup_html, build_deep_dive_page
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +114,33 @@ def _send_email(html: str, subject: str, to_email: str = "", display_name: str =
         return False
 
 
+def _upload_deep_dive_page(html: str, date_str: str) -> str | None:
+    filename = f"deep-dives/digest-{date_str}.html"
+    try:
+        supabase.storage.from_("images").upload(
+            filename, html.encode("utf-8"), {"content-type": "text/html"}
+        )
+        url = supabase.storage.from_("images").get_public_url(filename)
+        logger.info(f"Uploaded deep dive page: {url}")
+        return url
+    except Exception as e:
+        logger.error(f"Deep dive page upload failed: {type(e).__name__}: {e}")
+        return None
+
+
+def _compute_age_days(created_at_str: str) -> float:
+    if not created_at_str:
+        return 0
+    from dateutil.parser import isoparse
+    now = datetime.now(timezone.utc)
+    return (now - isoparse(created_at_str)).total_seconds() / 86400
+
+
 def generate_full_digest(user_id: str, display_name: str = "", user_email: str = "") -> str | None:
     logger.info(f"Generating Saturday full digest for {display_name or user_id}")
 
     cluster_data = cluster_items(user_id)
-    go_deep_items = get_go_deep_items(user_id)
+    go_deep_items_raw = get_go_deep_items(user_id)
     skipped = get_skipped_this_week(user_id, limit=3)
     unseen = get_never_surfaced(user_id, limit=1)
     stats = get_user_stats(user_id)
@@ -126,24 +148,46 @@ def generate_full_digest(user_id: str, display_name: str = "", user_email: str =
     logger.info(
         f"Building digest for {display_name or user_id} — "
         f"{cluster_data.get('total_clusters', 0)} clusters, "
-        f"{len(go_deep_items)} deep dives, "
+        f"{len(go_deep_items_raw)} deep dives, "
         f"{len(skipped)} skipped, {len(unseen)} unseen"
     )
 
-    deep_dives = []
+    all_deep_dives = []
     go_deep_ids = []
-    for item in go_deep_items:
+    for item in go_deep_items_raw:
         title = item.get("title", "Untitled")
         content = _generate_deep_dive(item.get("extracted_text") or item.get("summary") or "", title, item.get("category_name", ""))
         url = _extract_url(item.get("raw_content")) if item.get("content_type") == "url" else None
-        deep_dives.append({
+        interest = item.get("interest", 2)
+        goal = item.get("goal_alignment", 1)
+        score = _PRIORITY_MATRIX.get((interest, goal), 1)
+        all_deep_dives.append({
+            "item_id": item["id"],
             "title": title,
             "deep_dive_content": content,
             "url": url,
             "category_name": item.get("category_name"),
             "status": item.get("status"),
+            "age_days": _compute_age_days(item.get("created_at", "")),
+            "_score": score,
         })
         go_deep_ids.append(item["id"])
+
+    all_deep_dives.sort(key=lambda x: -x["_score"])
+
+    top_dives = all_deep_dives[:3]
+    extra_dives = all_deep_dives[3:]
+
+    page_url = None
+    if extra_dives:
+        date_str = datetime.now(IST).strftime("%Y-%m-%d")
+        date_range_for_page = _date_range_str()
+        page_html = build_deep_dive_page(all_deep_dives, date_range_for_page)
+        page_url = _upload_deep_dive_page(page_html, date_str)
+        if not page_url:
+            logger.warning("Upload failed — falling back to all deep dives in email")
+            top_dives = all_deep_dives
+            extra_dives = []
 
     for item in skipped:
         item["url"] = _extract_url(item.get("raw_content")) if item.get("content_type") == "url" else None
@@ -154,7 +198,10 @@ def generate_full_digest(user_id: str, display_name: str = "", user_email: str =
     data = {
         "clusters": cluster_data.get("clusters", []),
         "standalone": cluster_data.get("standalone", []),
-        "deep_dives": deep_dives,
+        "deep_dives": top_dives,
+        "extra_deep_dives": extra_dives,
+        "deep_dive_page_url": page_url,
+        "total_deep_dives": len(all_deep_dives),
         "skipped_items": skipped,
         "unseen_items": unseen,
         "stats": stats,
