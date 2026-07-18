@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cue — Save anything. Forget nothing.</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
+    background: #FFF8F0;
+    color: #1f2937;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    text-align: center;
+    padding: 40px 0 24px;
+  }
+
+  .hero h1 {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 8px;
+  }
+
+  .hero .tagline {
+    font-size: 22px;
+    font-weight: 600;
+    color: #2563eb;
+    margin-bottom: 10px;
+  }
+
+  .hero .description {
+    font-size: 16px;
+    color: #4b5563;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  /* ── SECTIONS ── */
+  section { padding: 32px 0; }
+
+  section h2 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    letter-spacing: -0.3px;
+  }
+
+  /* ── PROBLEM ── */
+  .problem { border-top: 1px solid #e8e0d4; }
+
+  .problem p {
+    font-size: 17px;
+    color: #4b5563;
+    max-width: 580px;
+  }
+
+  /* ── HOW IT WORKS ── */
+  .how-it-works { border-top: 1px solid #e8e0d4; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid #e8e0d4;
+    border-radius: 10px;
+    padding: 20px 16px;
+  }
+
+  .card .card-icon { font-size: 28px; margin-bottom: 8px; }
+
+  .card h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+
+  .card p { font-size: 13px; color: #6b7280; line-height: 1.5; }
+
+  /* ── DEMO ── */
+  .demo { border-top: 1px solid #e8e0d4; }
+
+  .demo-box {
+    background: #000;
+    border-radius: 12px;
+    padding: 56px 24px;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 15px;
+  }
+
+  /* ── FEATURES ── */
+  .features { border-top: 1px solid #e8e0d4; }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .feature-item {
+    background: #ffffff;
+    border: 1px solid #e8e0d4;
+    border-radius: 10px;
+    padding: 18px 16px;
+  }
+
+  .feature-item h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .feature-item p {
+    font-size: 13px;
+    color: #6b7280;
+    line-height: 1.5;
+  }
+
+  /* ── TECH STACK ── */
+  .tech-stack { border-top: 1px solid #e8e0d4; }
+
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pill {
+    background: #ffffff;
+    border: 1px solid #e8e0d4;
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+  }
+
+  /* ── CTA ── */
+  .cta {
+    border-top: 1px solid #e8e0d4;
+    text-align: center;
+    padding: 40px 0 64px;
+  }
+
+  .cta-button {
+    display: inline-block;
+    background: #2563eb;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 14px 32px;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+
+  .cta-button:hover { background: #1d4ed8; }
+
+  .cta-sub {
+    margin-top: 14px;
+    font-size: 13px;
+    color: #9ca3af;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .hero { padding: 32px 0 20px; }
+    .hero h1 { font-size: 36px; }
+    .hero .tagline { font-size: 18px; }
+    .hero .description { font-size: 15px; }
+
+    section { padding: 24px 0; }
+    section h2 { font-size: 20px; }
+
+    .cards { grid-template-columns: 1fr; gap: 10px; }
+
+    .feature-grid { grid-template-columns: 1fr; gap: 10px; }
+
+    .problem p { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>Cue</h1>
+    <div class="tagline">Save anything. Forget nothing.</div>
+    <div class="description">A personal AI tool that captures what you save across platforms, organizes it, and brings back what matters.</div>
+  </div>
+
+  <!-- THE PROBLEM -->
+  <section class="problem">
+    <h2>The problem</h2>
+    <p>We save things everywhere — screenshots, articles, voice notes, random ideas. None of it connects. All of it gets forgotten.</p>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-it-works">
+    <h2>How it works</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">📥</div>
+        <h3>Capture</h3>
+        <p>Share anything to a Telegram bot. Screenshots, links, voice notes, text. It classifies and stores automatically.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔔</div>
+        <h3>Resurface</h3>
+        <p>Daily nudges based on interest and goal alignment. Nothing sits unseen for more than 7 days.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔗</div>
+        <h3>Connect</h3>
+        <p>Weekly digest groups related saves from different platforms into themes using semantic similarity.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section class="demo">
+    <h2>Demo</h2>
+    <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:12px;">
+      <iframe src="https://www.youtube.com/embed/nmrZKs7fYko" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none; border-radius:12px;" allowfullscreen></iframe>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <h2>Features</h2>
+    <div class="feature-grid">
+      <div class="feature-item">
+        <h3>📸 Multi-format capture</h3>
+        <p>Screenshots, URLs, voice notes, plain text — each processed by a format-specific extractor, then classified by one universal AI classifier.</p>
+      </div>
+      <div class="feature-item">
+        <h3>🎯 Smart resurfacing</h3>
+        <p>Lifecycle-based nudges: guaranteed first look within 7 days, priority rotation with cooldowns, and forced decisions after 3 ignores.</p>
+      </div>
+      <div class="feature-item">
+        <h3>🔗 Cross-source clustering</h3>
+        <p>HDBSCAN groups related saves from different platforms into themes — no manual tagging, no fixed number of clusters.</p>
+      </div>
+      <div class="feature-item">
+        <h3>🧠 Go Deep</h3>
+        <p>Tap one button and get a category-aware AI analysis in your weekly digest — skill breakdowns for job posts, argument summaries for articles, feasibility checks for ideas.</p>
+      </div>
+      <div class="feature-item">
+        <h3>📬 Weekly digest</h3>
+        <p>Saturday email with themed clusters, article summaries, and deep dives. Sunday follow-up for anything still pending.</p>
+      </div>
+      <div class="feature-item">
+        <h3>⏰ Configurable schedule</h3>
+        <p>Set your own nudge and reminder times. Rate interest and goal alignment at save time — or skip it, defaults apply.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TECH STACK -->
+  <section class="tech-stack">
+    <h2>Tech stack</h2>
+    <div class="pills">
+      <span class="pill">Python</span>
+      <span class="pill">Telegram Bot API</span>
+      <span class="pill">OpenAI</span>
+      <span class="pill">Supabase</span>
+      <span class="pill">pgvector</span>
+      <span class="pill">HDBSCAN</span>
+      <span class="pill">SendGrid</span>
+      <span class="pill">Railway</span>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <a class="cta-button" href="https://github.com/dreamerbasa/Cue">Explore the project →</a>
+    <div class="cta-sub">Open source · Built with AI</div>
+  </section>
+
+</div>
+
+</body>
+</html>
