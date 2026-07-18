@@ -4,7 +4,7 @@ Save anything. Forget nothing.
 
 Personal AI tool that captures saves from multiple platforms, classifies them, and resurfaces what matters through lifecycle-based nudges and semantic clustering.
 
-[Live site](https://dreamerbasa.github.io/Resurface/) · [Demo video](https://youtube.com/watch?v=nmrZKs7fYko)
+[Live site](https://dreamerbasa.github.io/Cue/) · [Demo video](https://youtube.com/watch?v=nmrZKs7fYko)
 
 ## Architecture
 
