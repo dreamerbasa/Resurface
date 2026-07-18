@@ -1,6 +1,6 @@
 # Cue
 
-Save anything. Forget nothing.
+Save. Remember. Learn.
 
 Personal AI tool that captures saves from multiple platforms, classifies them, and resurfaces what matters through lifecycle-based nudges and semantic clustering.
 
